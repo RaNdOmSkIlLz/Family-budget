@@ -52,9 +52,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 /* COLORS */
 .green{color:#34c759}.blue{color:#007aff}.orange{color:#ff9500}.purple{color:#af52de}.red{color:#ff3b30}
 /* SECTIONS */
-.section{background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden}
+.section{background:#fff;border-radius:14px;margin-bottom:14px;overflow:visible}
 .block{background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden}
-.sec-hdr,.block-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f2f2f7}
+.sec-hdr,.block-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f2f2f7;border-radius:14px 14px 0 0}
 .sec-accent,.accent{width:4px;height:20px;border-radius:2px;flex-shrink:0}
 .sec-title,.block-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#3a3a3c}
 .block-title{text-transform:none;font-size:14px}
@@ -63,7 +63,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .badge-green{background:#d1f4d9;color:#1a7f37}.badge-orange{background:#fff3cd;color:#9a6700}
 .badge-blue{background:#ddeeff;color:#0055cc}.badge-purple{background:#f0e6ff;color:#6600cc}
 /* CATEGORY ROW */
-.cat-row{border-bottom:1px solid #f9f9f9;background:#fff}
+.cat-row{border-bottom:1px solid #f9f9f9;background:#fff;position:relative}
 .cat-row:last-child{border-bottom:none}
 .cat-row.closed-row{background:#fafafa}
 .cat-row.sinking-row{background:#f6fff8}
@@ -101,7 +101,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 /* THREE DOT MENU */
 .menu-wrap{position:relative}
 .btn-menu{background:none;border:none;font-size:18px;color:#8e8e93;cursor:pointer;padding:0 4px;line-height:1}
-.dropdown{display:none;position:absolute;right:0;top:24px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:180px;z-index:50;overflow:hidden}
+.dropdown{display:none;position:absolute;right:0;top:24px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:180px;z-index:200;overflow:hidden}
 .dropdown.open{display:block}
 .dd-item{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:#1c1c1e;cursor:pointer;border-bottom:1px solid #f2f2f7}
 .dd-item:last-child{border-bottom:none}
@@ -299,6 +299,7 @@ let windowStart=0;
 let trackerIdx=0;
 let monthlyIdx=0;
 let expandedCats=new Set(); // only for current view
+let collapsedSections=new Set(); // sections collapsed in current view
 let modalCtx=null;
 let syncTimer=null;
 
@@ -469,6 +470,7 @@ function shiftWindow(dir,containerId,activeIdx,showAdd){
 
 function selectTrackerMonth(idx){
   expandedCats.clear();
+  collapsedSections.clear();
   closeAllDropdowns();
   renderTracker(idx);
 }
@@ -490,6 +492,13 @@ function addNextMonth(){
 }
 
 // ── TRACKER RENDER ────────────────────────────────────────────────────────────
+
+
+function toggleSection(secName){
+  if(collapsedSections.has(secName)) collapsedSections.delete(secName);
+  else collapsedSections.add(secName);
+  renderTracker(trackerIdx);
+}
 
 function markSectionSpent(idx,secName,event){
   event.stopPropagation();
@@ -555,20 +564,21 @@ function renderTracker(idx){
     const secNonZeroCats=items.filter(c=>(getBudget(idx,c.Category)||0)>0);
     const secAllSavings=secNonZeroCats.length>0&&secNonZeroCats.every(c=>c.isSavings);
     const secBtnLabel='Mark All Saved';
-    html+=`<div class="section"><div class="sec-hdr">
+    const secCollapsed=collapsedSections.has(secName);
+    html+='<div class="section">';
+    // Section header
+    const secHdrMeta=secCollapsed
+      ?`<span style="color:#8e8e93;font-size:12px;font-variant-numeric:tabular-nums">${fmt(secActual)} / ${fmt(secBudget)}</span>`
+      :`${secAllDone?'<span style="color:#34c759;font-weight:600;font-size:13px">✓</span>':''}
+       ${secVar!==null?`<span class="${secVar>0.005?'red':secVar<-0.005?'green':'orange'}" style="font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>`:''}
+       <span style="font-size:12px;color:#8e8e93">${fmt(secBudget)}</span>
+       ${secAllSavings&&!secAllDone?`<button class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;padding:3px 8px;font-size:11px" onclick="event.stopPropagation();markSectionSpent(${idx},'${secName.replace(/'/g,"\\'")}',event)">${secBtnLabel}</button>`:''}`;
+    html+=`<div class="sec-hdr" style="cursor:pointer" onclick="toggleSection('${secName.replace(/'/g,"\\'")}')">
       <div class="sec-accent" style="background:${col}"></div>
       <div class="sec-title">${secName}</div>
-      <div class="sec-meta">
-        ${secAllDone?'<span style="color:#34c759;font-weight:600;font-size:13px">✓</span>':''}
-        ${secVar!==null?`<span class="${secVar>0.005?'red':secVar<-0.005?'green':'orange'}" style="font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>`:''}
-        <span style="font-size:12px;color:#8e8e93">${fmt(secBudget)}</span>
-        ${secAllSavings&&!secAllDone?`<button class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;padding:3px 8px;font-size:11px" onclick="markSectionSpent(${idx},'${secName.replace(/'/g,"\\'")}',event)">${secBtnLabel}</button>`:''}
-      </div>
+      <div class="sec-meta">${secHdrMeta}<span style="color:#8e8e93;font-size:14px;margin-left:6px">${secCollapsed?'›':'⌄'}</span></div>
     </div>`;
-
-    items.forEach(cat=>{
-      html+=renderCatRow(idx,cat);
-    });
+    if(!secCollapsed){items.forEach(cat=>{html+=renderCatRow(idx,cat);});}
     html+='</div>';
   });
 
@@ -604,9 +614,14 @@ function renderCatRow(idx,cat){
     <span class="cat-name">${cat.Category}</span>
     <div class="cat-badges">${badges}${txnCountBadge}</div>
     <div class="cat-right">
-      <input class="cat-budget-input" id="bi_${esc(cat.Category)}" value="${fmt(budget)}"
-        onclick="event.stopPropagation()" onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
-        onkeydown="if(event.key==='Enter'){this.blur()}" title="Click to edit budget">
+      <div style="display:flex;align-items:center;gap:3px">
+        <input class="cat-budget-input" id="bi_${esc(cat.Category)}" value="${fmt(budget)}"
+          onclick="event.stopPropagation()" onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
+          onkeydown="if(event.key==='Enter'){this.blur()}" title="Click to edit budget">
+        <button style="background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;line-height:1"
+          onclick="event.stopPropagation();${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"
+          title="${st.isClosed?'Reopen':'Close'} category">${st.isClosed?'🔒':'🔓'}</button>
+      </div>
       ${sf?`<span style="font-size:11px;color:#34c759;font-variant-numeric:tabular-nums">Bal: ${fmt(effectiveBudget)}</span>`:''}
       <span class="cat-actual" style="color:${actual!==null?(variance!==null&&variance>0.005?'#ff3b30':'#1c1c1e'):'#8e8e93'}">${actual!==null?fmt(actual):'—'}</span>
       <span class="cat-var ${variance!==null&&variance>0.005?'var-over':variance!==null&&variance<-0.005?'var-under':'var-exact'}">${fmtSigned(variance)}</span>
@@ -1159,6 +1174,7 @@ function updateSSResults(){
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
 function showTab(id,el){
   expandedCats.clear();
+  collapsedSections.clear();
   closeAllDropdowns();
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
