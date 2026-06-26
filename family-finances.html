@@ -293,7 +293,7 @@ let accessToken=null, tokenClient;
 let budgetPlan=[];   // original plan from Sheet (never modified)
 let trackerBudgets={};// per-month overrides: {monthKey:{cat:amount}}
 let planConfig={};
-let trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{}};
+let trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{},deletedTxnIds:[]};
 let months=[...BASE_MONTHS]; // expandable
 let windowStart=0;
 let trackerIdx=0;
@@ -355,55 +355,39 @@ function getPlanBudget(idx,cat){
 }
 
 // ── SINKING FUND LOGIC ────────────────────────────────────────────────────────
+// Clean structure: trackerData.sinkingFunds[cat] = {isActive, activeFrom, runningBalance}
+function getSFRecord(cat){
+  return trackerData.sinkingFunds[cat]||{isActive:false,activeFrom:0,runningBalance:0};
+}
 function isSinking(cat){
-  // Check if category has sinking fund enabled (global flag in trackerData)
-  return !!(trackerData.sinkingFunds && trackerData.sinkingFunds['_sf_flag_'+cat]);
+  return getSFRecord(cat).isActive===true||getSFRecord(cat).isActive==='true';
 }
 function setSinkingFlag(cat,val,fromMonthIdx){
-  // Store the flag and the month it was set from
+  const rec=getSFRecord(cat);
   if(val){
-    trackerData.sinkingFunds['_sf_flag_'+cat]=true;
-    trackerData.sinkingFunds['_sf_from_'+cat]=fromMonthIdx;
+    trackerData.sinkingFunds[cat]={isActive:true,activeFrom:fromMonthIdx,runningBalance:rec.runningBalance||0};
   } else {
-    // Only remove going forward — keep accumulated balance
-    delete trackerData.sinkingFunds['_sf_flag_'+cat];
-    trackerData.sinkingFunds['_sf_off_'+cat]=fromMonthIdx;
+    trackerData.sinkingFunds[cat]={...rec,isActive:false};
   }
   scheduleSave();
 }
-function getSinkingBalance(cat,upToIdx){
-  // Sum of (budget-actual) for all past closed months where sinking was active
-  let bal=0;
-  for(let i=0;i<upToIdx;i++){
-    const k=mk(i);
-    const st=getState(i,cat);
-    const sfFrom=trackerData.sinkingFunds['_sf_from_'+cat]||0;
-    const sfOff=trackerData.sinkingFunds['_sf_off_'+cat];
-    const wasActive=(i>=sfFrom)&&(sfOff===undefined||i<sfOff);
-    if(!wasActive)continue;
-    if(!st.isClosed)continue;
-    const budget=getBudget(i,cat);
-    const actual=getActual(i,cat,budget)||0;
-    bal+=budget-actual; // positive=unspent, negative=overspent
-  }
-  // Check for zeroed overrides
-  const zeroKey='_sf_zero_'+cat;
-  if(trackerData.sinkingFunds[zeroKey]){
-    const zeros=trackerData.sinkingFunds[zeroKey]; // array of {upToIdx, amount}
-    zeros.forEach(z=>{if(upToIdx>z.atIdx) bal=Math.max(0,bal+z.adj);});
-  }
-  return bal;
+function getSinkingBalance(cat,idx){
+  // Returns running balance + this month's budget (balance available for this month)
+  const rec=getSFRecord(cat);
+  return (parseFloat(rec.runningBalance)||0);
 }
-
+function updateSinkingRunningBalance(cat,delta){
+  const rec=getSFRecord(cat);
+  trackerData.sinkingFunds[cat]={...rec,runningBalance:(parseFloat(rec.runningBalance)||0)+delta};
+  scheduleSave();
+}
 function zeroNegativeSinkingCarryover(cat,idx){
-  const bal=getSinkingBalance(cat,idx);
-  if(bal>=0)return; // nothing to zero
-  // Add a positive adjustment to bring to 0
-  const zeroKey='_sf_zero_'+cat;
-  if(!trackerData.sinkingFunds[zeroKey])trackerData.sinkingFunds[zeroKey]=[];
-  trackerData.sinkingFunds[zeroKey].push({atIdx:idx-1,adj:Math.abs(bal)});
+  const rec=getSFRecord(cat);
+  const bal=parseFloat(rec.runningBalance)||0;
+  if(bal>=0)return;
+  trackerData.sinkingFunds[cat]={...rec,runningBalance:0};
   scheduleSave();
-  renderTracker(trackerIdx);
+  renderTracker(idx);
 }
 
 // ── TRACKER STATE ─────────────────────────────────────────────────────────────
@@ -509,6 +493,21 @@ function addNextMonth(){
 }
 
 // ── TRACKER RENDER ────────────────────────────────────────────────────────────
+
+function markSectionSpent(idx,secName,event){
+  event.stopPropagation();
+  budgetPlan.forEach(cat=>{
+    if(cat.Section!==secName)return;
+    const budget=getBudget(idx,cat.Category);
+    if(!budget||budget<=0)return;
+    const st=getState(idx,cat.Category);
+    const actual=getActual(idx,cat.Category,budget);
+    if(st.isSpent||actual===budget)return; // already done
+    setState(idx,cat.Category,{isSpent:true});
+  });
+  renderTracker(idx);
+}
+
 function renderTracker(idx){
   trackerIdx=idx;
   renderMonthNav('monthNav',idx,selectTrackerMonth,true);
@@ -549,12 +548,22 @@ function renderTracker(idx){
       if(a!==null)secActual+=a;
     });
     const secVar=secActual>0?secActual-secBudget:null;
+    // Check if all non-zero unspent categories in section are done
+    const secCatsNonZero=items.filter(c=>(getBudget(idx,c.Category)||0)>0);
+    const secAllDone=secCatsNonZero.length>0&&secCatsNonZero.every(c=>{
+      const b=getBudget(idx,c.Category);const st=getState(idx,c.Category);
+      const a=getActual(idx,c.Category,b);return st.isSpent||a===b;
+    });
+    const secIsSavings=items.some(c=>c.isSavings);
+    const secBtnLabel=secIsSavings?'Mark All Saved':'Mark All Spent';
     html+=`<div class="section"><div class="sec-hdr">
       <div class="sec-accent" style="background:${col}"></div>
       <div class="sec-title">${secName}</div>
       <div class="sec-meta">
+        ${secAllDone?'<span style="color:#34c759;font-weight:600;font-size:13px">✓</span>':''}
         ${secVar!==null?`<span class="${secVar>0.005?'red':secVar<-0.005?'green':'orange'}" style="font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>`:''}
         <span style="font-size:12px;color:#8e8e93">${fmt(secBudget)}</span>
+        ${!secAllDone?`<button class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;padding:3px 8px;font-size:11px" onclick="markSectionSpent(${idx},'${secName.replace(/'/g,"\\'")}',event)">${secBtnLabel}</button>`:''}
       </div>
     </div>`;
 
@@ -596,9 +605,10 @@ function renderCatRow(idx,cat){
     <span class="cat-name">${cat.Category}</span>
     <div class="cat-badges">${badges}${txnCountBadge}</div>
     <div class="cat-right">
-      <input class="cat-budget-input" id="bi_${esc(cat.Category)}" value="${fmt(effectiveBudget)}"
+      <input class="cat-budget-input" id="bi_${esc(cat.Category)}" value="${fmt(budget)}"
         onclick="event.stopPropagation()" onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
         onkeydown="if(event.key==='Enter'){this.blur()}" title="Click to edit budget">
+      ${sf?`<span style="font-size:11px;color:#34c759;font-variant-numeric:tabular-nums">Bal: ${fmt(effectiveBudget)}</span>`:''}
       <span class="cat-actual" style="color:${actual!==null?(variance!==null&&variance>0.005?'#ff3b30':'#1c1c1e'):'#8e8e93'}">${actual!==null?fmt(actual):'—'}</span>
       <span class="cat-var ${variance!==null&&variance>0.005?'var-over':variance!==null&&variance<-0.005?'var-under':'var-exact'}">${fmtSigned(variance)}</span>
     </div>
@@ -630,7 +640,7 @@ function renderCatRow(idx,cat){
         </div>
       </div>
       <button class="btn-xs btn-spent ${st.isSpent||actual===budget?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">
-        ${st.isSpent||actual===budget?'Spent ✓':'Mark Spent'}
+        ${cat.isSavings?(st.isSpent||actual===budget?'Saved ✓':'Mark Saved'):(st.isSpent||actual===budget?'Spent ✓':'Mark Spent')}
       </button>
     </div>
   </div>`;
@@ -690,12 +700,27 @@ function toggleSinking(idx,cat){
 function closeCategory(idx,cat){
   closeAllDropdowns();
   setState(idx,cat,{isClosed:true});
+  // If sinking fund, update running balance with this month's unspent/overspent
+  if(isSinking(cat)){
+    const budget=getBudget(idx,cat);
+    const actual=getActual(idx,cat,budget)||0;
+    const delta=budget-actual; // positive=unspent adds to balance, negative=overspend reduces it
+    updateSinkingRunningBalance(cat,delta);
+  }
   renderTracker(idx);
 }
 
 function reopenCategory(idx,cat){
   closeAllDropdowns();
+  const wasClosed=getState(idx,cat).isClosed;
   setState(idx,cat,{isClosed:false});
+  // Reverse the sinking fund balance update if it was closed
+  if(wasClosed&&isSinking(cat)){
+    const budget=getBudget(idx,cat);
+    const actual=getActual(idx,cat,budget)||0;
+    const delta=-(budget-actual); // reverse the delta
+    updateSinkingRunningBalance(cat,delta);
+  }
   renderTracker(idx);
 }
 
@@ -712,7 +737,11 @@ function coverFromSurplus(idx,cat,overage){
 
 function deleteTxn(idx,cat,ti){
   const txns=getTxns(idx,cat);
-  txns.splice(ti,1);
+  const removed=txns.splice(ti,1);
+  if(removed.length&&removed[0].id){
+    if(!trackerData.deletedTxnIds)trackerData.deletedTxnIds=[];
+    trackerData.deletedTxnIds.push(removed[0].id);
+  }
   setTxns(idx,cat,txns);
   renderTracker(idx);
 }
@@ -1173,6 +1202,7 @@ async function loadBudgetConfig(){
     obj.amounts={};
     MONTH_KEYS_BASE.forEach(mk=>{obj.amounts[mk]=parseFloat(obj[mk])||0;});
     obj.isFixed=obj.Fixed==='TRUE';obj.isSinkingFund=obj.SinkingFund==='TRUE';
+    obj.isSavings=obj.Savings==='TRUE';
     return obj;
   }).filter(r=>r.Category);
 }
@@ -1206,7 +1236,14 @@ async function loadTrackerData(){
     if(!trackerData.transactions[month][cat])trackerData.transactions[month][cat]=[];
     trackerData.transactions[month][cat].push({id,desc,amt:parseFloat(amt)||0,ts,splitGroupId:sgId||null});
   });
-  if(sfRows.length>1)sfRows.slice(1).forEach(r=>{if(r[0])trackerData.sinkingFunds[r[0]]=r[1];});
+  if(sfRows.length>1)sfRows.slice(1).forEach(r=>{
+    if(!r[0])return;
+    trackerData.sinkingFunds[r[0]]={
+      isActive:r[1]==='TRUE',
+      activeFrom:parseInt(r[2])||0,
+      runningBalance:parseFloat(r[3])||0
+    };
+  });
   if(budgetRows.length>1)budgetRows.slice(1).forEach(r=>{
     const[month,cat,amt]=r;
     if(!month||!cat)return;
@@ -1235,14 +1272,17 @@ async function saveAll(){
         stateRows.push([month,cat,s.isSpent?'TRUE':'FALSE',s.isClosed?'TRUE':'FALSE','FALSE',s.surplusCovered||0]);
       });
     });
+    const deletedIds=new Set(trackerData.deletedTxnIds||[]);
     const txnRows=[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID']];
     Object.entries(trackerData.transactions).forEach(([month,cats])=>{
       Object.entries(cats).forEach(([cat,txns])=>{
-        txns.forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'']));
+        txns.filter(t=>!deletedIds.has(t.id)).forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'']));
       });
     });
-    const sfRows=[['Key','Value']];
-    Object.entries(trackerData.sinkingFunds).forEach(([k,v])=>sfRows.push([k,v]));
+    const sfRows=[['Category','IsActive','ActiveFrom','RunningBalance']];
+    Object.entries(trackerData.sinkingFunds).forEach(([cat,rec])=>{
+      if(typeof rec==='object')sfRows.push([cat,rec.isActive?'TRUE':'FALSE',rec.activeFrom||0,rec.runningBalance||0]);
+    });
     const budgetRows=[['Month','Category','Amount']];
     Object.entries(trackerBudgets).forEach(([month,cats])=>{
       Object.entries(cats).forEach(([cat,amt])=>budgetRows.push([month,cat,amt]));
@@ -1263,7 +1303,7 @@ async function saveAll(){
 // ── SETUP SHEETS ──────────────────────────────────────────────────────────────
 async function setupBudgetSheet(){
   setLoading('Setting up Budget sheet...');
-  const h=['Category','Section','Color','Fixed','SinkingFund',...MONTH_KEYS_BASE];
+  const h=['Category','Section','Color','Fixed','SinkingFund','Savings',...MONTH_KEYS_BASE];
   await clearAndWrite(BUDGET_SHEET_ID,'Budget!A1',[h,...DEFAULT_BUDGET_DATA]);
   await clearAndWrite(BUDGET_SHEET_ID,'CategoryState!A1',[['Month','Category','IsSpent','IsClosed','IsSinkingFund','SurplusCovered']]);
   await clearAndWrite(BUDGET_SHEET_ID,'Transactions!A1',[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID']]);
@@ -1278,47 +1318,47 @@ async function setupPlanSheet(){
 
 // ── DEFAULT DATA ──────────────────────────────────────────────────────────────
 const DEFAULT_BUDGET_DATA=[
-  ['Mortgage','Housing & Transport','#007aff','TRUE','FALSE',4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400],
-  ['Car payment','Housing & Transport','#007aff','TRUE','FALSE',648,648,648,648,648,648,648,648,648,648,648,648],
-  ['Car insurance','Housing & Transport','#007aff','TRUE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Internet','Housing & Transport','#007aff','TRUE','FALSE',69,69,69,69,69,69,69,69,69,69,69,69],
-  ['Electricity','Utilities','#ff9500','FALSE','FALSE',700,550,450,380,320,300,300,380,420,480,550,700],
-  ['Water','Utilities','#ff9500','TRUE','FALSE',175,175,175,175,175,175,175,175,175,175,175,175],
-  ['Natural gas','Utilities','#ff9500','FALSE','FALSE',75,100,130,160,190,200,200,150,120,100,75,75],
-  ['Groceries','Food','#34c759','FALSE','FALSE',1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000],
-  ['Dining out','Food','#34c759','FALSE','FALSE',900,900,900,900,900,900,900,900,900,900,900,900],
-  ['Daycare','Kids','#ff3b30','FALSE','FALSE',687.5,0,0,0,0,687.5,687.5,687.5,687.5,687.5,0,0],
-  ['Kids clothes & items','Kids','#ff3b30','FALSE','TRUE',300,300,300,300,300,300,300,300,300,300,300,300],
-  ['Sports dues','Kids','#ff3b30','FALSE','TRUE',0,375,375,83,83,83,0,0,0,0,0,0],
-  ['Housekeeper','Home','#8e8e93','TRUE','FALSE',320,320,320,320,320,320,320,320,320,320,320,320],
-  ['Lawn care','Home','#8e8e93','TRUE','FALSE',200,200,200,200,200,200,200,200,200,200,200,200],
-  ['Home expenses','Home','#8e8e93','FALSE','TRUE',300,300,300,300,300,300,300,300,300,300,300,300],
-  ['HOA','Home','#8e8e93','TRUE','FALSE',131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67],
-  ['Grooming','Pet','#ff6b35','TRUE','FALSE',80,80,80,80,80,80,80,80,80,80,80,80],
-  ['Pet food & misc','Pet','#ff6b35','FALSE','FALSE',20,20,20,20,20,20,20,20,20,20,20,20],
-  ['Gym','Lifestyle','#af52de','TRUE','FALSE',388,388,388,388,388,388,388,388,388,388,388,510],
-  ['Streaming','Lifestyle','#af52de','TRUE','FALSE',120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96],
-  ['Gas/fuel','Lifestyle','#af52de','FALSE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Toll roads','Lifestyle','#af52de','FALSE','FALSE',75,75,75,75,75,75,75,75,75,75,75,75],
-  ['Haircuts','Lifestyle','#af52de','FALSE','TRUE',60,60,300,60,300,60,60,300,60,300,60,300],
-  ['Date night','Lifestyle','#af52de','FALSE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Personal (Eric)','Personal & Giving','#5856d6','FALSE','FALSE',400,400,400,400,400,400,400,400,400,400,400,400],
-  ['Personal (Mattie)','Personal & Giving','#5856d6','FALSE','FALSE',420,420,420,420,420,420,420,420,420,420,420,420],
-  ['Life insurance','Personal & Giving','#5856d6','TRUE','FALSE',78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02],
-  ['Tithe','Personal & Giving','#5856d6','TRUE','FALSE',800,800,800,800,800,900,900,900,900,900,900,900],
-  ['Kinsley 529','529s','#af52de','TRUE','FALSE',325,325,325,325,325,325,325,325,325,325,325,325],
-  ['Kyle 529','529s','#af52de','TRUE','FALSE',200,200,200,200,200,200,200,200,200,200,200,200],
-  ['Collins 529','529s','#af52de','TRUE','FALSE',225,225,225,225,225,225,225,225,225,225,225,225],
-  ['Kinsley car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE',152,152,152,152,152,152,152,152,152,152,152,152],
-  ['Kyle car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE',162,162,162,162,162,162,162,162,162,162,162,162],
-  ['Collins car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE',106,106,106,106,106,106,106,106,106,106,106,106],
-  ['Kinsley wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE',167,167,167,167,167,167,167,167,167,167,167,167],
-  ['Collins wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE',96,96,96,96,96,96,96,96,96,96,96,96],
-  ['Mattie procedures','Savings Goals','#ff6b35','TRUE','FALSE',1250,1250,1250,1250,1250,1250,0,0,0,0,0,0],
-  ['Mattie car fund','Savings Goals','#ff9500','TRUE','FALSE',433,433,433,433,433,433,1683,1683,1683,1683,1683,1683],
-  ['Home projects fund','Savings Goals','#8e8e93','FALSE','TRUE',300,300,300,300,300,300,300,300,300,300,300,300],
-  ['Christmas fund','Savings Goals','#ff2d55','FALSE','FALSE',0,0,0,0,0,0,0,0,0,0,0,0],
-  ['Emergency fund','Savings Goals','#34c759','FALSE','FALSE',0,0,0,0,0,0,0,0,0,0,0,0],
+  ['Mortgage','Housing & Transport','#007aff','TRUE','FALSE','FALSE',4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400],
+  ['Car payment','Housing & Transport','#007aff','TRUE','FALSE','FALSE',648,648,648,648,648,648,648,648,648,648,648,648],
+  ['Car insurance','Housing & Transport','#007aff','TRUE','FALSE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Internet','Housing & Transport','#007aff','TRUE','FALSE','FALSE',69,69,69,69,69,69,69,69,69,69,69,69],
+  ['Electricity','Utilities','#ff9500','FALSE','FALSE','FALSE',700,550,450,380,320,300,300,380,420,480,550,700],
+  ['Water','Utilities','#ff9500','TRUE','FALSE','FALSE',175,175,175,175,175,175,175,175,175,175,175,175],
+  ['Natural gas','Utilities','#ff9500','FALSE','FALSE','FALSE',75,100,130,160,190,200,200,150,120,100,75,75],
+  ['Groceries','Food','#34c759','FALSE','FALSE','FALSE',1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000],
+  ['Dining out','Food','#34c759','FALSE','FALSE','FALSE',900,900,900,900,900,900,900,900,900,900,900,900],
+  ['Daycare','Kids','#ff3b30','FALSE','FALSE','FALSE',687.5,0,0,0,0,687.5,687.5,687.5,687.5,687.5,0,0],
+  ['Kids clothes & items','Kids','#ff3b30','FALSE','TRUE','FALSE',300,300,300,300,300,300,300,300,300,300,300,300],
+  ['Sports dues','Kids','#ff3b30','FALSE','TRUE','FALSE',0,375,375,83,83,83,0,0,0,0,0,0],
+  ['Housekeeper','Home','#8e8e93','TRUE','FALSE','FALSE',320,320,320,320,320,320,320,320,320,320,320,320],
+  ['Lawn care','Home','#8e8e93','TRUE','FALSE','FALSE',200,200,200,200,200,200,200,200,200,200,200,200],
+  ['Home expenses','Home','#8e8e93','FALSE','TRUE','FALSE',300,300,300,300,300,300,300,300,300,300,300,300],
+  ['HOA','Home','#8e8e93','TRUE','FALSE','FALSE',131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67],
+  ['Grooming','Pet','#ff6b35','TRUE','FALSE','FALSE',80,80,80,80,80,80,80,80,80,80,80,80],
+  ['Pet food & misc','Pet','#ff6b35','FALSE','FALSE','FALSE',20,20,20,20,20,20,20,20,20,20,20,20],
+  ['Gym','Lifestyle','#af52de','TRUE','FALSE','FALSE',388,388,388,388,388,388,388,388,388,388,388,510],
+  ['Streaming','Lifestyle','#af52de','TRUE','FALSE','FALSE',120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96],
+  ['Gas/fuel','Lifestyle','#af52de','FALSE','FALSE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Toll roads','Lifestyle','#af52de','FALSE','FALSE','FALSE',75,75,75,75,75,75,75,75,75,75,75,75],
+  ['Haircuts','Lifestyle','#af52de','FALSE','TRUE','FALSE',60,60,300,60,300,60,60,300,60,300,60,300],
+  ['Date night','Lifestyle','#af52de','FALSE','FALSE','FALSE',250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Personal (Eric)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',400,400,400,400,400,400,400,400,400,400,400,400],
+  ['Personal (Mattie)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',420,420,420,420,420,420,420,420,420,420,420,420],
+  ['Life insurance','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02],
+  ['Tithe','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',800,800,800,800,800,900,900,900,900,900,900,900],
+  ['Kinsley 529','529s','#af52de','TRUE','FALSE','TRUE',325,325,325,325,325,325,325,325,325,325,325,325],
+  ['Kyle 529','529s','#af52de','TRUE','FALSE','TRUE',200,200,200,200,200,200,200,200,200,200,200,200],
+  ['Collins 529','529s','#af52de','TRUE','FALSE','TRUE',225,225,225,225,225,225,225,225,225,225,225,225],
+  ['Kinsley car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',152,152,152,152,152,152,152,152,152,152,152,152],
+  ['Kyle car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',162,162,162,162,162,162,162,162,162,162,162,162],
+  ['Collins car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',106,106,106,106,106,106,106,106,106,106,106,106],
+  ['Kinsley wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',167,167,167,167,167,167,167,167,167,167,167,167],
+  ['Collins wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',96,96,96,96,96,96,96,96,96,96,96,96],
+  ['Mattie procedures','Savings Goals','#ff6b35','TRUE','FALSE','TRUE',1250,1250,1250,1250,1250,1250,0,0,0,0,0,0],
+  ['Mattie car fund','Savings Goals','#ff9500','TRUE','FALSE','TRUE',433,433,433,433,433,433,1683,1683,1683,1683,1683,1683],
+  ['Home projects fund','Savings Goals','#8e8e93','FALSE','TRUE','TRUE',300,300,300,300,300,300,300,300,300,300,300,300],
+  ['Christmas fund','Savings Goals','#ff2d55','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0],
+  ['Emergency fund','Savings Goals','#34c759','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0],
 ];
 
 const DEFAULT_PLAN_DATA=[
