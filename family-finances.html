@@ -645,10 +645,10 @@ function renderCatRow(idx,cat){
   return`<div class="cat-row ${st.isClosed?'closed-row':''} ${sf?'sinking-row':''}">
     ${catHeader}
     ${barHtml}
+    ${actionsHtml}
     <div class="cat-body ${isExpanded?'open':''}">
       ${subNote}
       ${txnHtml}
-      ${actionsHtml}
     </div>
   </div>`;
 }
