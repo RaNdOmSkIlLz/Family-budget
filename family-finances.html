@@ -1213,7 +1213,7 @@ function setLoading(msg){document.getElementById('loadingMsg').textContent=msg;}
 const MONTH_KEYS_BASE=['Aug26','Sep26','Oct26','Nov26','Dec26','Jan27','Feb27','Mar27','Apr27','May27','Jun27','Jul27'];
 
 async function loadBudgetConfig(){
-  const rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:R');
+  const rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:S'); // A:S to include Savings column
   if(rows.length<2){await setupBudgetSheet();return loadBudgetConfig();}
   const headers=rows[0];
   budgetPlan=rows.slice(1).map(row=>{
@@ -1243,9 +1243,11 @@ async function loadTrackerData(){
   trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{}};
   trackerBudgets={};
   if(stateRows.length>1)stateRows.slice(1).forEach(r=>{
-    const[month,cat,isSpent,isClosed,,surplusCovered]=r;
+    const[month,cat,isSpent,isClosed,col4,col5]=r;
     if(!month||!cat)return;
     if(!trackerData.state[month])trackerData.state[month]={};
+    // Handle both old (6-col with IsSinkingFund) and new (5-col) format
+    const surplusCovered=r.length>=6?col5:col4;
     trackerData.state[month][cat]={isSpent:isSpent==='TRUE',isClosed:isClosed==='TRUE',surplusCovered:parseFloat(surplusCovered)||0};
   });
   if(txnRows.length>1)txnRows.slice(1).forEach(r=>{
@@ -1257,6 +1259,7 @@ async function loadTrackerData(){
   });
   if(sfRows.length>1)sfRows.slice(1).forEach(r=>{
     if(!r[0])return;
+    if(r[0].startsWith('_sf_'))return; // skip old format rows
     trackerData.sinkingFunds[r[0]]={
       isActive:r[1]==='TRUE',
       activeFrom:parseInt(r[2])||0,
