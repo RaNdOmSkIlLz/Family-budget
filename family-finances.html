@@ -84,7 +84,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .cat-var{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
 .var-over{color:#ff3b30}.var-under{color:#34c759}.var-exact{color:#8e8e93}
 /* CAT BODY (expanded) */
-.cat-body{display:none;border-top:1px solid #f9f9f9}
+.cat-body{display:none;border-top:1px solid #f9f9f9;position:relative;z-index:1}
 .cat-body.open{display:block}
 /* PROGRESS BAR */
 .cat-bar{height:3px;background:#e5e5ea;margin:0 16px 0}
@@ -109,7 +109,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .dd-item.danger{color:#ff3b30}
 .dd-icon{font-size:16px;width:20px;text-align:center}
 /* TRANSACTIONS */
-.txn-list{padding:4px 16px 10px}
+.txn-list{padding:4px 16px 10px;position:relative;z-index:2}
 .txn{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f9f9f9;font-size:13px}
 .txn:last-child{border-bottom:none}
 .txn-icon{font-size:10px;padding:2px 5px;border-radius:5px;background:#f2f2f7;color:#6e6e73;flex-shrink:0}
@@ -425,18 +425,23 @@ function getActual(idx,cat,budgeted){
 
 function calcAvailable(idx){
   const income=getIncome(idx).total;
-  let totalBudget=0,freed=0;
+  let totalBudget=0,freed=0,totalCovered=0;
   budgetPlan.forEach(cat=>{
     const budget=getBudget(idx,cat.Category);
     totalBudget+=budget;
     const st=getState(idx,cat.Category);
+    // Freed from closed non-sinking categories
     if(st.isClosed){
       const actual=getActual(idx,cat.Category,budget)||0;
       if(!isSinking(cat.Category)&&actual<budget)freed+=budget-actual;
     }
+    // Subtract any cover transactions already applied (negative amt transactions)
+    const txns=getTxns(idx,cat.Category);
+    txns.forEach(t=>{if(t.desc==='Covered from surplus'&&t.amt<0)totalCovered+=Math.abs(t.amt);});
   });
   const unallocated=Math.max(0,income-totalBudget);
-  return{freed,unallocated,total:freed+unallocated};
+  const available=Math.max(0,freed+unallocated-totalCovered);
+  return{freed,unallocated,total:available};
 }
 
 // ── MONTH NAV ─────────────────────────────────────────────────────────────────
@@ -659,7 +664,10 @@ function renderCatRow(idx,cat){
     </div>
   </div>`;
 
-  const txnHtml=isExpanded&&txns.length?buildTxnHtml(txns,idx,cat.Category,st.isClosed):'';
+  const txnHtml=isExpanded
+    ?(txns.length?buildTxnHtml(txns,idx,cat.Category,st.isClosed)
+      :'<div class="sub-note" style="padding:8px 16px;color:#8e8e93">No transactions yet</div>')
+    :'';
 
   const subNote=st.isClosed&&!sf&&variance!==null&&variance<-0.005
     ?`<div class="sub-note good">Freed ${fmt(Math.abs(variance))} to surplus</div>`
