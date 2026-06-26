@@ -854,14 +854,15 @@ function saveAdd(){
   });
   if(!splits.length)return;
   const sgId=splits.length>1?'sg_'+uid():null;
+  const savedIdx=modalCtx.idx;
   splits.forEach(s=>{
-    const txns=getTxns(modalCtx.idx,s.cat);
+    const txns=getTxns(savedIdx,s.cat);
     txns.push({id:uid(),desc,amt:s.amt,ts:new Date().toISOString(),splitGroupId:sgId});
-    setTxns(modalCtx.idx,s.cat,txns);
+    setTxns(savedIdx,s.cat,txns);
     expandedCats.add(s.cat);
   });
   closeModal();
-  renderTracker(modalCtx.idx);
+  renderTracker(savedIdx);
 }
 
 function closeModal(){
