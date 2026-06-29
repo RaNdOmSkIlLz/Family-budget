@@ -4,6 +4,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta charset="UTF-8">
 <title>Givens Family Finances</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Family $">
+<link rel="apple-touch-icon" href="icon.png">
+<link rel="manifest" href="manifest.json">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:16px 16px 48px}
@@ -293,7 +298,7 @@ let accessToken=null, tokenClient;
 let budgetPlan=[];   // original plan from Sheet (never modified)
 let trackerBudgets={};// per-month overrides: {monthKey:{cat:amount}}
 let planConfig={};
-let trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{},deletedTxnIds:[]};
+let trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{}};
 let months=[...BASE_MONTHS]; // expandable
 let windowStart=0;
 let trackerIdx=0;
@@ -779,12 +784,11 @@ function coverFromSurplus(idx,cat,overage){
 
 function deleteTxn(idx,cat,ti){
   const txns=getTxns(idx,cat);
-  const removed=txns.splice(ti,1);
-  if(removed.length&&removed[0].id){
-    if(!trackerData.deletedTxnIds)trackerData.deletedTxnIds=[];
-    trackerData.deletedTxnIds.push(removed[0].id);
-  }
+  txns.splice(ti,1);
   setTxns(idx,cat,txns);
+  // Save immediately (not debounced) so deletion persists even on quick refresh
+  clearTimeout(syncTimer);
+  saveAll();
   renderTracker(idx);
 }
 
@@ -1170,14 +1174,62 @@ function drawMCChart(yd,years){
 }
 
 // ── SOCIAL SECURITY ───────────────────────────────────────────────────────────
-const SS={eric:{b:{65:3601,67:4155,70:5152},age:70},mattie:{b:{65:2466,67:2845,70:3528},age:65}};
+const SS={
+  eric:{
+    today:{65:3601,67:4155,70:5152},
+    future:{65:7189,67:8715,70:11638}, // 2.5% COLA applied to claim year
+    claimYear:{65:2054,67:2056,70:2059},
+    age:70
+  },
+  mattie:{
+    today:{65:2466,67:2845,70:3528},
+    future:{65:5046,67:6117,70:8168},
+    claimYear:{65:2055,67:2057,70:2060},
+    age:65
+  }
+};
 function setSS(p,a){SS[p].age=a;[65,67,70].forEach(x=>{const b=document.getElementById(`${p}-${x}`);if(b)b.className='ss-btn'+(x===a?' ss-active':'');});updateSSResults();}
 function updateSSResults(){
-  const eb=SS.eric.b[SS.eric.age],mb=SS.mattie.b[SS.mattie.age],cb=eb+mb;
+  const ericToday=SS.eric.today[SS.eric.age];
+  const mattieToday=SS.mattie.today[SS.mattie.age];
+  const ericFuture=SS.eric.future[SS.eric.age];
+  const mattieFuture=SS.mattie.future[SS.mattie.age];
+  const ericYear=SS.eric.claimYear[SS.eric.age];
+  const mattieYear=SS.mattie.claimYear[SS.mattie.age];
+  const combinedFuture=ericFuture+mattieFuture;
   const f=n=>'$'+n.toLocaleString();
   const hasRun=document.getElementById('mcIncome')?.innerHTML?.length>10;
-  const note=SS.eric.age===70?'<div style="font-size:12px;color:#1a7f37;margin-top:8px">★ Maximizes Eric\'s benefit + survivor protection (+$997/mo vs FRA)</div>':SS.eric.age===65?'<div style="font-size:12px;color:#ff9500;margin-top:8px">⚠ $1,551/mo less than claiming at 70</div>':'';
+  const note=SS.eric.age===70
+    ?'<div style="font-size:12px;color:#1a7f37;margin-top:8px">\u2605 Waiting until 70 maximizes Eric\'s benefit + survivor protection</div>'
+    :SS.eric.age===65?'<div style="font-size:12px;color:#ff9500;margin-top:8px">\u26A0 Claiming at 65 = $1,551/mo less than age 70 in today\'s dollars</div>':'';
   const el=document.getElementById('ssResults');if(!el)return;
+  el.innerHTML='<div style="border-top:1px solid #f2f2f7;padding-top:10px">'
+    +'<div style="font-size:12px;color:#8e8e93;margin-bottom:8px">Future dollars · 2.5%/yr COLA to claim year</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
+    +'<div><div style="color:#6e6e73">Eric at '+SS.eric.age+' ('+ericYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(ericToday)+'/mo</div></div>'
+    +'<span style="font-weight:600">'+f(ericFuture)+'/mo</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
+    +'<div><div style="color:#6e6e73">Mattie at '+SS.mattie.age+' ('+mattieYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(mattieToday)+'/mo</div></div>'
+    +'<span style="font-weight:600">'+f(mattieFuture)+'/mo</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600;border-bottom:1px solid #f9f9f9">'
+    +'<span>Combined SS (future $)</span><span style="color:#34c759">'+f(combinedFuture)+'/mo</span></div>'
+    +(hasRun
+      ?'<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f9f9f9"><span style="color:#6e6e73">Portfolio withdrawal (median)</span><span id="ssP">&#8212;</span></div>'
+       +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:700"><span>Total (portfolio + SS)</span><span style="color:#34c759" id="ssT">&#8212;</span></div>'
+       +'<div style="font-size:11px;color:#8e8e93;margin-top:4px">SS begins '+Math.min(ericYear,mattieYear)+'&#8211;'+Math.max(ericYear,mattieYear)+', after the 2054 portfolio milestone</div>'
+      :'<div style="font-size:12px;color:#8e8e93;margin-top:6px">Run Monte Carlo above to see combined total.</div>')
+    +note
+    +'<div style="font-size:11px;color:#8e8e93;margin-top:6px">Verify actual estimates at ssa.gov/myaccount</div></div>';
+  if(hasRun){
+    const pm=document.getElementById('mcPM');
+    if(pm){
+      const v=parseFloat(pm.dataset.m);
+      const ssP=document.getElementById('ssP');
+      const ssT=document.getElementById('ssT');
+      if(ssP)ssP.textContent='$'+Math.round(v).toLocaleString()+'/mo';
+      if(ssT)ssT.textContent='$'+Math.round(v+combinedFuture).toLocaleString()+'/mo';
+    }
+  }
 }
 
 // ── TAB SWITCHING ─────────────────────────────────────────────────────────────
@@ -1212,7 +1264,18 @@ async function gapi(method,url,body){
   const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   return r;
 }
-async function readSheet(sid,range){const r=await gapi('GET',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}`);const j=await r.json();return j.values||[];}
+async function readSheet(sid,range){
+  const r=await gapi('GET',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}`);
+  if(r.status===401||r.status===403){
+    // Token expired — clear and show sign in
+    accessToken=null;localStorage.removeItem('gv_token');
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('mainApp').style.display='none';
+    document.getElementById('authScreen').style.display='block';
+    throw new Error('Auth expired — please sign in again');
+  }
+  const j=await r.json();return j.values||[];
+}
 async function writeSheet(sid,range,values){await gapi('PUT',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{range,majorDimension:'ROWS',values});}
 async function clearAndWrite(sid,range,values){await gapi('POST',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}:clear`);if(values.length)await writeSheet(sid,range,values);}
 
@@ -1332,11 +1395,10 @@ async function saveAll(){
         stateRows.push([month,cat,s.isSpent?'TRUE':'FALSE',s.isClosed?'TRUE':'FALSE','FALSE',s.surplusCovered||0]);
       });
     });
-    const deletedIds=new Set(trackerData.deletedTxnIds||[]);
     const txnRows=[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']];
     Object.entries(trackerData.transactions).forEach(([month,cats])=>{
       Object.entries(cats).forEach(([cat,txns])=>{
-        txns.filter(t=>!deletedIds.has(t.id)).forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'',t.autoGenerated?'TRUE':'FALSE']));
+        txns.forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'',t.autoGenerated?'TRUE':'FALSE']));
       });
     });
     const sfRows=[['Category','IsActive','ActiveFrom','RunningBalance']];
@@ -1446,9 +1508,12 @@ const DEFAULT_PLAN_DATA=[
     document.getElementById('loadingScreen').style.display='block';
     try{await initApp();}
     catch(e){
-      accessToken=null;localStorage.removeItem('gv_token');
-      document.getElementById('loadingScreen').style.display='none';
-      document.getElementById('authScreen').style.display='block';
+      console.error('Init error:',e.message);
+      if(!document.getElementById('authScreen').style.display||document.getElementById('authScreen').style.display==='none'){
+        accessToken=null;localStorage.removeItem('gv_token');
+        document.getElementById('loadingScreen').style.display='none';
+        document.getElementById('authScreen').style.display='block';
+      }
     }
   }
 })();
