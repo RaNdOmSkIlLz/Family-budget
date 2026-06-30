@@ -1396,7 +1396,7 @@ function renderSnapshotAccounts(accounts) {
   const subCard = (label, total, key, accts, color, sub) => {
     if(!total) return '';
     const col = snapshotCollapsed[key];
-    return '<div class="card2" style="cursor:pointer" onclick="toggleSnapshotSection(''+key+'')">'
+    return '<div class="card2" style="cursor:pointer" data-sskey="'+key+'" onclick="toggleSnapshotSection(this.dataset.sskey)">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div class="card-label">'+label+'</div>'
       +'<span style="color:#8e8e93;font-size:12px">'+(col?'›':'⌄')+'</span>'
@@ -1411,7 +1411,7 @@ function renderSnapshotAccounts(accounts) {
 
   // ── RETIREMENT ──
   const retCol = snapshotCollapsed.retirement;
-  html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleSnapshotSection('retirement')">'
+  html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-sskey="retirement" onclick="toggleSnapshotSection(this.dataset.sskey)">'
     +'<span>Retirement</span>'
     +'<span style="font-size:12px;color:#007aff;font-variant-numeric:tabular-nums">'+fmt(retTotal)+' '+(retCol?'›':'⌄')+'</span>'
     +'</div>';
@@ -1428,7 +1428,7 @@ function renderSnapshotAccounts(accounts) {
   // ── 529 SAVINGS ──
   if(k529Total>0){
     const s529Col = snapshotCollapsed['529'];
-    html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:8px" onclick="toggleSnapshotSection('529')">'
+    html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:8px" data-sskey="529" onclick="toggleSnapshotSection(this.dataset.sskey)">'
       +'<span>529 Savings</span>'
       +'<span style="font-size:12px;color:#af52de;font-variant-numeric:tabular-nums">'+fmt(k529Total)+' '+(s529Col?'›':'⌄')+'</span>'
       +'</div>';
@@ -1456,4 +1456,337 @@ function renderSnapshotAccounts(accounts) {
   el.innerHTML = html;
 }
 
->
+// ── PLAID AUTH ────────────────────────────────────────────────────────────────
+function loadGIS(){return new Promise(r=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=r;s.onerror=()=>{console.error('GIS failed to load');r();};document.head.appendChild(s);});}
+
+async function signIn(){
+  const btn=document.querySelector('#authScreen button');
+  if(btn){btn.textContent='Signing in...';btn.disabled=true;}
+  try{
+    await loadGIS();
+    if(typeof google==='undefined'||!google.accounts){
+      alert('Google sign-in failed to load. Please check your internet connection and try again.');
+      if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
+      return;
+    }
+    tokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:CLIENT_ID,scope:SCOPES,
+      callback:async resp=>{
+        if(resp.error){
+          alert('Sign-in failed: '+resp.error);
+          if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
+          return;
+        }
+        accessToken=resp.access_token;
+        localStorage.setItem('gv_token',accessToken);
+        document.getElementById('authScreen').style.display='none';
+        document.getElementById('loadingScreen').style.display='block';
+        await initApp();
+      }
+    });
+    tokenClient.requestAccessToken({prompt:'consent'});
+  }catch(e){
+    console.error('signIn error:',e);
+    alert('Sign-in error: '+e.message);
+    if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
+  }
+}
+
+function signOut(){
+  if(accessToken&&typeof google!=='undefined')google.accounts.oauth2.revoke(accessToken);
+  accessToken=null;localStorage.removeItem('gv_token');
+  document.getElementById('mainApp').style.display='none';
+  document.getElementById('authScreen').style.display='block';
+}
+
+// ── SHEETS API ────────────────────────────────────────────────────────────────
+async function gapi(method,url,body){
+  const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
+  return r;
+}
+async function readSheet(sid,range){
+  const r=await gapi('GET',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}`);
+  if(r.status===401||r.status===403){
+    accessToken=null;localStorage.removeItem('gv_token');
+    document.getElementById('loadingScreen').style.display='none';
+    document.getElementById('mainApp').style.display='none';
+    document.getElementById('authScreen').style.display='block';
+    throw new Error('Auth expired — please sign in again');
+  }
+  const j=await r.json();return j.values||[];
+}
+async function writeSheet(sid,range,values){
+  await gapi('PUT',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{range,majorDimension:'ROWS',values});
+}
+async function clearAndWrite(sid,range,values){
+  await gapi('POST',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}:clear`);
+  if(values.length)await writeSheet(sid,range,values);
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function initApp(){
+  setLoading('Loading budget config...');
+  console.log('Loading from sheet ID:',BUDGET_SHEET_ID);
+  await loadBudgetConfig();
+  console.log('Budget config loaded:',budgetPlan.length,'categories');
+  setLoading('Loading financial plan...');
+  await loadPlanConfig();
+  setLoading('Loading tracker data...');
+  await loadTrackerData();
+  document.getElementById('loadingScreen').style.display='none';
+  document.getElementById('mainApp').style.display='block';
+  const startIdx=detectCurrentMonthIdx();
+  windowStart=Math.max(0,startIdx-2);
+  renderTracker(startIdx);
+  renderMonthly(startIdx);
+  renderSnapshot();renderWindfall();renderRetirement();renderGoals();
+}
+function setLoading(msg){document.getElementById('loadingMsg').textContent=msg;}
+
+// ── LOAD CONFIG ───────────────────────────────────────────────────────────────
+async function loadBudgetConfig(){
+  let rows=[];
+  try{rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:T');}
+  catch(e){setLoading('Error reading Budget sheet: '+e.message);throw e;}
+  if(rows.length<2){
+    setLoading('Budget sheet empty — setting up...');
+    await setupBudgetSheet();
+    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:T');
+    if(rows.length<2){setLoading('Setup failed — check sheet tab names');throw new Error('Setup failed');}
+  }
+  const headers=rows[0];
+  budgetPlan=rows.slice(1).map(row=>{
+    const obj={};headers.forEach((h,i)=>obj[h]=row[i]||'');
+    obj.amounts={};
+    MONTH_KEYS_BASE.forEach(mk=>{obj.amounts[mk]=parseFloat(obj[mk])||0;});
+    obj.isFixed=obj.Fixed==='TRUE';obj.isSinkingFund=obj.SinkingFund==='TRUE';
+    obj.isSavings=obj.Savings==='TRUE';
+    return obj;
+  }).filter(r=>r.Category);
+}
+
+async function loadPlanConfig(){
+  const rows=await readSheet(PLAN_SHEET_ID,'Plan!A:B');
+  if(rows.length<2){await setupPlanSheet();return loadPlanConfig();}
+  planConfig={};rows.slice(1).forEach(r=>{if(r[0])planConfig[r[0]]=r[1]||'';});
+}
+
+async function loadTrackerData(){
+  const[stateRows,txnRows,sfRows,budgetRows,monthRows]=await Promise.all([
+    readSheet(BUDGET_SHEET_ID,'CategoryState!A:F'),
+    readSheet(BUDGET_SHEET_ID,'Transactions!A:H'),
+    readSheet(BUDGET_SHEET_ID,'SinkingFunds!A:D'),
+    readSheet(BUDGET_SHEET_ID,'TrackerBudgets!A:C'),
+    readSheet(BUDGET_SHEET_ID,'ExtraMonths!A:C'),
+  ]);
+  trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{},confirmedPlaidIds:new Set()};
+  trackerBudgets={};
+
+  if(stateRows.length>1)stateRows.slice(1).forEach(r=>{
+    const[month,cat,isSpent,isClosed,col4,col5]=r;
+    if(!month||!cat)return;
+    if(!trackerData.state[month])trackerData.state[month]={};
+    const surplusCovered=r.length>=6?col5:col4;
+    trackerData.state[month][cat]={isSpent:isSpent==='TRUE',isClosed:isClosed==='TRUE',surplusCovered:parseFloat(surplusCovered)||0};
+  });
+
+  if(txnRows.length>1)txnRows.slice(1).forEach(r=>{
+    const[id,month,cat,desc,amt,ts,sgId,autoGen]=r;
+    if(!month||!cat)return;
+    if(!trackerData.transactions[month])trackerData.transactions[month]={};
+    if(!trackerData.transactions[month][cat])trackerData.transactions[month][cat]=[];
+    const txnObj={id,desc,amt:parseFloat(amt)||0,ts,splitGroupId:sgId||null,autoGenerated:autoGen==='TRUE'};
+    trackerData.transactions[month][cat].push(txnObj);
+    if(id&&id.length>8)trackerData.confirmedPlaidIds.add(id);
+  });
+
+  if(sfRows.length>1)sfRows.slice(1).forEach(r=>{
+    if(!r[0])return;
+    if(r[0].startsWith('_sf_'))return;
+    trackerData.sinkingFunds[r[0]]={isActive:r[1]==='TRUE',activeFrom:parseInt(r[2])||0,runningBalance:parseFloat(r[3])||0};
+  });
+
+  if(budgetRows.length>1)budgetRows.slice(1).forEach(r=>{
+    const[month,cat,amt]=r;
+    if(!month||!cat)return;
+    if(!trackerBudgets[month])trackerBudgets[month]={};
+    trackerBudgets[month][cat]=parseFloat(amt)||0;
+  });
+
+  if(monthRows.length>1){
+    monthRows.slice(1).forEach(r=>{
+      const[key,label,yearMonth]=r;
+      if(!key)return;
+      const[year,month]=yearMonth?yearMonth.split('-').map(Number):[2027,8];
+      if(!months.find(m=>m.key===key))months.push({key,label,year,month});
+    });
+  }
+
+  // Load merchant map
+  const mmRows=await readSheet(BUDGET_SHEET_ID,'MerchantMap!A:B');
+  merchantMap={};
+  if(mmRows.length>1)mmRows.slice(1).forEach(r=>{if(r[0]&&r[1])merchantMap[r[0].toLowerCase()]=r[1];});
+}
+
+// ── SAVE ──────────────────────────────────────────────────────────────────────
+function scheduleSave(){setSyncStatus('syncing');clearTimeout(syncTimer);syncTimer=setTimeout(saveAll,1500);}
+function setSyncStatus(s){
+  const d=document.getElementById('syncDot'),t=document.getElementById('syncStatus');
+  if(!d||!t)return;
+  d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
+  t.textContent=s==='syncing'?'Saving...':s==='error'?'Error':'Saved';
+}
+
+async function saveAll(){
+  try{
+    const stateRows=[['Month','Category','IsSpent','IsClosed','SurplusCovered']];
+    Object.entries(trackerData.state).forEach(([month,cats])=>{
+      Object.entries(cats).forEach(([cat,s])=>{
+        stateRows.push([month,cat,s.isSpent?'TRUE':'FALSE',s.isClosed?'TRUE':'FALSE',s.surplusCovered||0]);
+      });
+    });
+
+    const txnRows=[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']];
+    Object.entries(trackerData.transactions).forEach(([month,cats])=>{
+      Object.entries(cats).forEach(([cat,txns])=>{
+        txns.forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'',t.autoGenerated?'TRUE':'FALSE']));
+      });
+    });
+
+    const sfRows=[['Category','IsActive','ActiveFrom','RunningBalance']];
+    Object.entries(trackerData.sinkingFunds).forEach(([cat,rec])=>{
+      if(typeof rec==='object')sfRows.push([cat,rec.isActive?'TRUE':'FALSE',rec.activeFrom||0,rec.runningBalance||0]);
+    });
+
+    const budgetRows=[['Month','Category','Amount']];
+    Object.entries(trackerBudgets).forEach(([month,cats])=>{
+      Object.entries(cats).forEach(([cat,amt])=>budgetRows.push([month,cat,amt]));
+    });
+
+    const extraMonthRows=[['Key','Label','YearMonth']];
+    months.slice(BASE_MONTHS.length).forEach(m=>extraMonthRows.push([m.key,m.label,`${m.year}-${m.month}`]));
+
+    const mmRows2=[['Merchant','Category']];
+    Object.entries(merchantMap).forEach(([m,c])=>mmRows2.push([m,c]));
+
+    await Promise.all([
+      clearAndWrite(BUDGET_SHEET_ID,'CategoryState!A1',stateRows),
+      clearAndWrite(BUDGET_SHEET_ID,'Transactions!A1',txnRows),
+      clearAndWrite(BUDGET_SHEET_ID,'SinkingFunds!A1',sfRows),
+      clearAndWrite(BUDGET_SHEET_ID,'TrackerBudgets!A1',budgetRows),
+      clearAndWrite(BUDGET_SHEET_ID,'ExtraMonths!A1',extraMonthRows),
+      clearAndWrite(BUDGET_SHEET_ID,'MerchantMap!A1',mmRows2),
+    ]);
+    setSyncStatus('ok');
+  }catch(e){setSyncStatus('error');console.error(e);}
+}
+
+// ── SETUP SHEETS ──────────────────────────────────────────────────────────────
+async function setupBudgetSheet(){
+  try{
+    setLoading('Setting up Budget sheet...');
+    const h=['Category','Section','Color','Fixed','SinkingFund','Savings',...MONTH_KEYS_BASE];
+    await clearAndWrite(BUDGET_SHEET_ID,'Budget!A1',[h,...DEFAULT_BUDGET_DATA]);
+    await clearAndWrite(BUDGET_SHEET_ID,'CategoryState!A1',[['Month','Category','IsSpent','IsClosed','SurplusCovered']]);
+    await clearAndWrite(BUDGET_SHEET_ID,'Transactions!A1',[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']]);
+    await clearAndWrite(BUDGET_SHEET_ID,'SinkingFunds!A1',[['Category','IsActive','ActiveFrom','RunningBalance']]);
+    await clearAndWrite(BUDGET_SHEET_ID,'TrackerBudgets!A1',[['Month','Category','Amount']]);
+    await clearAndWrite(BUDGET_SHEET_ID,'ExtraMonths!A1',[['Key','Label','YearMonth']]);
+  }catch(e){setLoading('Sheet setup error: '+e.message+' — check tab names');throw e;}
+}
+async function setupPlanSheet(){
+  setLoading('Setting up Plan sheet...');
+  await clearAndWrite(PLAN_SHEET_ID,'Plan!A1',[['Key','Value'],...DEFAULT_PLAN_DATA]);
+}
+
+// ── DEFAULT DATA ──────────────────────────────────────────────────────────────
+const DEFAULT_BUDGET_DATA=[
+  ['Mortgage','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400],
+  ['Car payment','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,648,648,648,648,648,648,648,648,648,648,648,648,648],
+  ['Car insurance','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Internet','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,69,69,69,69,69,69,69,69,69,69,69,69,69],
+  ['Electricity','Utilities','#ff9500','FALSE','FALSE','FALSE',0,700,550,450,380,320,300,300,380,420,480,550,700,700],
+  ['Water','Utilities','#ff9500','TRUE','FALSE','FALSE',0,175,175,175,175,175,175,175,175,175,175,175,175,175],
+  ['Natural gas','Utilities','#ff9500','FALSE','FALSE','FALSE',0,75,100,130,160,190,200,200,150,120,100,75,75,75],
+  ['Groceries','Food','#34c759','FALSE','FALSE','FALSE',0,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000],
+  ['Dining out','Food','#34c759','FALSE','FALSE','FALSE',0,900,900,900,900,900,900,900,900,900,900,900,900,900],
+  ['Daycare','Kids','#ff3b30','FALSE','FALSE','FALSE',0,687.5,0,0,0,0,687.5,687.5,687.5,687.5,687.5,0,0,0],
+  ['Kids clothes & items','Kids','#ff3b30','FALSE','TRUE','FALSE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
+  ['Sports dues','Kids','#ff3b30','FALSE','TRUE','FALSE',0,0,375,375,83,83,83,0,0,0,0,0,0,0],
+  ['Housekeeper','Home','#8e8e93','TRUE','FALSE','FALSE',0,320,320,320,320,320,320,320,320,320,320,320,320,320],
+  ['Lawn care','Home','#8e8e93','TRUE','FALSE','FALSE',0,200,200,200,200,200,200,200,200,200,200,200,200,200],
+  ['Home expenses','Home','#8e8e93','FALSE','TRUE','FALSE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
+  ['HOA','Home','#8e8e93','TRUE','FALSE','FALSE',0,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67],
+  ['Grooming','Pet','#ff6b35','TRUE','FALSE','FALSE',0,80,80,80,80,80,80,80,80,80,80,80,80,80],
+  ['Pet food & misc','Pet','#ff6b35','FALSE','FALSE','FALSE',0,20,20,20,20,20,20,20,20,20,20,20,20,20],
+  ['Gym','Lifestyle','#af52de','TRUE','FALSE','FALSE',0,388,388,388,388,388,388,388,388,388,388,388,510,510],
+  ['Streaming','Lifestyle','#af52de','TRUE','FALSE','FALSE',0,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96],
+  ['Gas/fuel','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Toll roads','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,75,75,75,75,75,75,75,75,75,75,75,75,75],
+  ['Haircuts','Lifestyle','#af52de','FALSE','TRUE','FALSE',0,60,60,300,60,300,60,60,300,60,300,60,300,300],
+  ['Date night','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
+  ['Personal (Eric)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',0,400,400,400,400,400,400,400,400,400,400,400,400,400],
+  ['Personal (Mattie)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',0,420,420,420,420,420,420,420,420,420,420,420,420,420],
+  ['Life insurance','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',0,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02],
+  ['Tithe','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',0,800,800,800,800,800,900,900,900,900,900,900,900,900],
+  ['Kinsley 529','529s','#af52de','TRUE','FALSE','TRUE',0,325,325,325,325,325,325,325,325,325,325,325,325,325],
+  ['Kyle 529','529s','#af52de','TRUE','FALSE','TRUE',0,200,200,200,200,200,200,200,200,200,200,200,200,200],
+  ['Collins 529','529s','#af52de','TRUE','FALSE','TRUE',0,225,225,225,225,225,225,225,225,225,225,225,225,225],
+  ['Kinsley car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,152,152,152,152,152,152,152,152,152,152,152,152,152],
+  ['Kyle car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,162,162,162,162,162,162,162,162,162,162,162,162,162],
+  ['Collins car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,106,106,106,106,106,106,106,106,106,106,106,106,106],
+  ['Kinsley wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',0,167,167,167,167,167,167,167,167,167,167,167,167,167],
+  ['Collins wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',0,96,96,96,96,96,96,96,96,96,96,96,96,96],
+  ['Mattie procedures','Savings Goals','#ff6b35','TRUE','FALSE','TRUE',0,1250,1250,1250,1250,1250,1250,0,0,0,0,0,0,0],
+  ['Mattie car fund','Savings Goals','#ff9500','TRUE','FALSE','TRUE',0,433,433,433,433,433,433,1683,1683,1683,1683,1683,1683,1683],
+  ['Home projects fund','Savings Goals','#8e8e93','FALSE','TRUE','TRUE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
+  ['Christmas fund','Savings Goals','#ff2d55','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  ['Emergency fund','Savings Goals','#34c759','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+];
+
+const DEFAULT_PLAN_DATA=[
+  ['income_monthly','$16,583.30'],['windfall_annual','$25,927'],['invested_annual','$67,702'],
+  ['balance_401k','$370,000'],['balance_roth','$50,000'],['balance_aftertax','$26,000'],
+  ['balance_hsa','$3,000'],['balance_retirement_total','$449,000'],
+  ['emergency_balance','$17,500'],['emergency_target','$78,000'],
+  ['529_kinsley','$15,500'],['529_kyle','$16,000'],['529_collins','$3,000'],
+  ['hsa_annual','$6,400'],['contrib_401k','$30,000'],['contrib_match','$16,302'],
+  ['contrib_roth_ira','$15,000'],['windfall_roth_eric','$7,500'],['windfall_roth_mattie','$7,500'],
+  ['windfall_vacation','$5,000'],['windfall_christmas','$2,000'],['windfall_home','$1,000'],
+  ['windfall_car_mattie','$1,463'],['windfall_emergency','$1,464'],
+  ['car_mattie_saved','$4,300'],['eric_age','37'],['mattie_age','36'],
+];
+
+// ── AUTO DETECT MONTH ─────────────────────────────────────────────────────────
+function detectCurrentMonthIdx(){
+  const today=new Date();
+  const ty=today.getFullYear(),tm=today.getMonth()+1;
+  const idx=months.findIndex(m=>m.year===ty&&m.month===tm);
+  if(idx!==-1)return idx;
+  const first=months[0];
+  if(ty<first.year||(ty===first.year&&tm<first.month))return 0;
+  return months.length-1;
+}
+
+// ── BOOT ──────────────────────────────────────────────────────────────────────
+(async()=>{
+  const saved=localStorage.getItem('gv_token');
+  if(saved){
+    await loadGIS();
+    accessToken=saved;
+    document.getElementById('authScreen').style.display='none';
+    document.getElementById('loadingScreen').style.display='block';
+    try{await initApp();}
+    catch(e){
+      console.error('Init error:',e.message);
+      if(!document.getElementById('authScreen').style.display||document.getElementById('authScreen').style.display==='none'){
+        accessToken=null;localStorage.removeItem('gv_token');
+        document.getElementById('loadingScreen').style.display='none';
+        document.getElementById('authScreen').style.display='block';
+      }
+    }
+  }
+})();
+</script>
+</body>
+</html>
