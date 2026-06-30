@@ -1462,6 +1462,18 @@ function renderSnapshotAccounts(accounts) {
   el.innerHTML = html;
 }
 
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────────
+function showTab(id,el){
+  expandedCats.clear();
+  collapsedSections.clear();
+  closeAllDropdowns();
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  el.classList.add('active');
+  if(id==='projection')buildProjection();
+}
+
 // ── PLAID AUTH ────────────────────────────────────────────────────────────────
 function loadGIS(){return new Promise(r=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=r;s.onerror=()=>{console.error('GIS failed to load');r();};document.head.appendChild(s);});}
 
