@@ -1356,6 +1356,27 @@ function toggleSnapshotSection(key) {
   renderSnapshotAccounts(window._lastPlaidAccounts || []);
 }
 
+function renderSnapshot(){
+  const p=planConfig;
+  document.getElementById('snapshotContent').innerHTML=
+    '<div class="divider">Overview</div>'
+    +'<div class="card4">'
+    +'<div class="card2"><div class="card-label">Monthly income</div><div class="card-value blue">'+(p['income_monthly']||'$16,583')+'</div><div class="card-sub">Take-home</div></div>'
+    +'<div class="card2"><div class="card-label">Annual windfall</div><div class="card-value orange">'+(p['windfall_annual']||'$25,927')+'</div><div class="card-sub">Bonuses + extra checks</div></div>'
+    +'<div class="card2"><div class="card-label">Invested/year</div><div class="card-value purple">'+(p['invested_annual']||'$67,702')+'</div><div class="card-sub">Incl. employer match</div></div>'
+    +'<div class="card2"><div class="card-label">Emergency fund</div><div class="card-value orange">'+(p['emergency_balance']||'$17,500')+'</div><div class="card-sub">Target: '+(p['emergency_target']||'$78,000')+'</div></div>'
+    +'</div>'
+    +'<div class="divider">Connected accounts</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<button id="plaidConnectBtn" class="btn-xs btn-add" style="font-size:13px;padding:8px 16px" onclick="connectAccount()">+ Connect Account</button>'
+    +'<button id="plaidSyncBtn" class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;font-size:13px;padding:8px 16px" onclick="syncBalances()">&#8635; Sync Balances</button>'
+    +'</div>'
+    +'<p id="plaidStatus" style="font-size:12px;color:#8e8e93;margin-bottom:12px"></p>'
+    +'<div id="plaidAccountsList"></div>';
+  syncBalances();
+}
+
+
 function renderSnapshotAccounts(accounts) {
   window._lastPlaidAccounts = accounts;
   const el = document.getElementById('plaidAccountsList');
