@@ -733,6 +733,11 @@ function renderTracker(idx){
     <div class="card"><div class="card-label">Spent</div><div class="card-value ${totalActual>0?'green':''}">${fmt(totalActual)}</div></div>
     <div class="card"><div class="card-label">Available</div><div class="card-value orange">${fmt(avail.total)}</div></div>`;
 
+  // Sync button row
+  const syncRow=document.getElementById('syncTxnRow');
+  if(syncRow)syncRow.innerHTML='<button id="syncTxnBtn" class="btn-xs btn-add" style="font-size:12px;padding:6px 14px" onclick="syncPlaidTransactions()">&#8635; Sync Chase (30 days)</button>'
+    +'<span id="syncTxnStatus" style="font-size:12px;color:#8e8e93;margin-left:8px"></span>';
+
   // Render pending transaction queue
   const pqEl=document.getElementById('pendingQueue');
   if(pqEl)pqEl.innerHTML=renderPendingQueue();
@@ -1350,7 +1355,7 @@ function getAccountMapping(acct) {
 }
 
 // Collapse state for snapshot
-let snapshotCollapsed = { retirement: false, roth: false, '401k': false, brokerage: false, hsa: false, '529': false };
+let snapshotCollapsed = { retirement: false, roth: false, '401k': false, brokerage: false, hsa: false, '529': false, kinsley529: false, kyle529: false, collins529: false };
 function toggleSnapshotSection(key) {
   snapshotCollapsed[key] = !snapshotCollapsed[key];
   renderSnapshotAccounts(window._lastPlaidAccounts || []);
@@ -1388,16 +1393,21 @@ function renderSnapshotAccounts(accounts) {
 
   const mapped = accounts.filter(a => !a.error).map(a => ({...a, mapping: getAccountMapping(a)}));
 
-  const groups = {roth:[], '401k':[], brokerage:[], hsa:[], ira:[], k529:{kinsley:[], kyle:[], collins:[]}, other:[]};
+  // Categorize accounts
+  const groups = {roth:[], '401k':[], brokerage:[], hsa:[], ira:[],
+    k529:{kinsley:[], kyle:[], collins:[]}, credit:[], other:[]};
+
   mapped.forEach(a => {
     const sub = a.mapping.subtype;
     const child = (a.mapping.child||'').toLowerCase();
+    const type = (a.type||'').toLowerCase();
     if(sub==='529'&&child&&groups.k529[child]) groups.k529[child].push(a);
     else if(sub==='roth') groups.roth.push(a);
     else if(sub==='401k') groups['401k'].push(a);
     else if(sub==='brokerage') groups.brokerage.push(a);
     else if(sub==='hsa') groups.hsa.push(a);
     else if(sub==='ira') groups.ira.push(a);
+    else if(type==='credit') groups.credit.push(a);
     else groups.other.push(a);
   });
 
@@ -1412,39 +1422,44 @@ function renderSnapshotAccounts(accounts) {
   const collinsTotal = sum(groups.k529.collins);
   const k529Total = kinsleyTotal+kyleTotal+collinsTotal;
 
-  // Card for each subcategory with account details below when expanded
-  const acctDetail = (accts) => accts.map(a =>
-    '<div style="display:flex;justify-content:space-between;padding:4px 0;font-size:12px;color:#6e6e73">'
+  const acctDetail = accts => accts.map(a =>
+    '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:#6e6e73">'
     +'<span>'+(a.mapping.label||a.name)+'</span>'
     +'<span style="font-variant-numeric:tabular-nums">'+fmt(a.balance||0)+'</span>'
     +'</div>'
   ).join('');
 
+  // Subcategory card — expandable
   const subCard = (label, total, key, accts, color, sub) => {
-    if(!total) return '';
+    if(!total&&!accts.length) return '';
     const col = snapshotCollapsed[key];
-    return '<div class="card2" style="cursor:pointer" data-sskey="'+key+'" onclick="toggleSnapshotSection(this.dataset.sskey)">'
+    return '<div class="card2" data-sskey="'+key+'" onclick="toggleSnapshotSection(this.dataset.sskey)" style="cursor:pointer">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
       +'<div class="card-label">'+label+'</div>'
       +'<span style="color:#8e8e93;font-size:12px">'+(col?'›':'⌄')+'</span>'
       +'</div>'
       +'<div class="card-value" style="color:'+(color||'#1c1c1e')+'">'+fmt(total)+'</div>'
       +(sub?'<div class="card-sub">'+sub+'</div>':'')
-      +(!col&&accts.length?'<div style="margin-top:8px;border-top:1px solid #f2f2f7;padding-top:6px">'+acctDetail(accts)+'</div>':'')
+      +(!col&&accts.length?'<div style="margin-top:6px;border-top:1px solid #f2f2f7;padding-top:4px">'+acctDetail(accts)+'</div>':'')
       +'</div>';
   };
 
   let html = '';
 
-  // ── RETIREMENT ──
+  // ── RETIREMENT BOX ──
   const retCol = snapshotCollapsed.retirement;
-  html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer" data-sskey="retirement" onclick="toggleSnapshotSection(this.dataset.sskey)">'
-    +'<span>Retirement</span>'
-    +'<span style="font-size:12px;color:#007aff;font-variant-numeric:tabular-nums">'+fmt(retTotal)+' '+(retCol?'›':'⌄')+'</span>'
-    +'</div>';
+  html += '<div data-sskey="retirement" onclick="toggleSnapshotSection(this.dataset.sskey)" style="cursor:pointer">'
+    +'<div class="card2 full" style="margin-bottom:10px">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center">'
+    +'<div class="card-label">Retirement</div>'
+    +'<span style="color:#8e8e93;font-size:13px">'+(retCol?'›':'⌄')+'</span>'
+    +'</div>'
+    +'<div class="card-value blue" style="font-size:20px">'+fmt(retTotal)+'</div>'
+    +'<div class="card-sub">Tap to '+(retCol?'expand':'collapse')+'</div>'
+    +'</div></div>';
 
   if(!retCol){
-    html += '<div class="card4">';
+    html += '<div class="card4" style="margin-bottom:14px">';
     if(rothTotal>0) html += subCard('Roth IRA', rothTotal, 'roth', [...groups.roth,...groups.ira], '#34c759', groups.roth.length+' account'+(groups.roth.length!==1?'s':''));
     if(k401Total>0) html += subCard('401k', k401Total, '401k', groups['401k'], '#007aff', groups['401k'].length+' account'+(groups['401k'].length!==1?'s':''));
     if(brokerageTotal>0) html += subCard('Brokerage', brokerageTotal, 'brokerage', groups.brokerage, '#af52de', groups.brokerage.length+' account'+(groups.brokerage.length!==1?'s':''));
@@ -1455,12 +1470,17 @@ function renderSnapshotAccounts(accounts) {
   // ── 529 SAVINGS ──
   if(k529Total>0){
     const s529Col = snapshotCollapsed['529'];
-    html += '<div class="divider" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;margin-top:8px" data-sskey="529" onclick="toggleSnapshotSection(this.dataset.sskey)">'
-      +'<span>529 Savings</span>'
-      +'<span style="font-size:12px;color:#af52de;font-variant-numeric:tabular-nums">'+fmt(k529Total)+' '+(s529Col?'›':'⌄')+'</span>'
-      +'</div>';
+    html += '<div data-sskey="529" onclick="toggleSnapshotSection(this.dataset.sskey)" style="cursor:pointer">'
+      +'<div class="card2 full" style="margin-bottom:10px">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center">'
+      +'<div class="card-label">529 Savings</div>'
+      +'<span style="color:#8e8e93;font-size:13px">'+(s529Col?'›':'⌄')+'</span>'
+      +'</div>'
+      +'<div class="card-value purple" style="font-size:20px">'+fmt(k529Total)+'</div>'
+      +'<div class="card-sub">Tap to '+(s529Col?'expand':'collapse')+'</div>'
+      +'</div></div>';
     if(!s529Col){
-      html += '<div class="card4">';
+      html += '<div class="card4" style="margin-bottom:14px">';
       if(kinsleyTotal>0) html += subCard('Kinsley', kinsleyTotal, 'kinsley529', groups.k529.kinsley, '#af52de', '8.5 yrs to college');
       if(kyleTotal>0) html += subCard('Kyle', kyleTotal, 'kyle529', groups.k529.kyle, '#af52de', '10.9 yrs to college');
       if(collinsTotal>0) html += subCard('Collins', collinsTotal, 'collins529', groups.k529.collins, '#af52de', '14 yrs to college');
@@ -1468,610 +1488,35 @@ function renderSnapshotAccounts(accounts) {
     }
   }
 
+  // ── CREDIT CARDS ──
+  if(groups.credit.length){
+    html += '<div class="divider" style="margin-top:4px">Credit cards</div>'
+      +'<div class="card4" style="margin-bottom:14px">';
+    groups.credit.forEach(a => {
+      html += '<div class="card2">'
+        +'<div class="card-label">'+(a.institution||'')+'</div>'
+        +'<div class="card-value" style="color:#ff3b30">'+fmt(a.balance||0)+'</div>'
+        +'<div class="card-sub">'+(a.officialName||a.name||'')+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
+  }
+
   // ── OTHER ──
   if(groups.other.length){
-    html += '<div class="divider" style="margin-top:8px">Other accounts</div>'
-      +'<div class="card4">'
-      +groups.other.map(a =>
-        '<div class="card2"><div class="card-label">'+(a.mapping.label||a.name)+'</div>'
+    html += '<div class="divider" style="margin-top:4px">Other</div>'
+      +'<div class="card4" style="margin-bottom:14px">';
+    groups.other.forEach(a => {
+      html += '<div class="card2">'
+        +'<div class="card-label">'+(a.mapping.label||a.name||'')+'</div>'
         +'<div class="card-value">'+fmt(a.balance||0)+'</div>'
-        +'<div class="card-sub">'+(a.subtype||a.type||'')+'</div></div>'
-      ).join('')
-      +'</div>';
+        +'<div class="card-sub">'+(a.subtype||a.type||'')+'</div>'
+        +'</div>';
+    });
+    html += '</div>';
   }
 
   el.innerHTML = html;
 }
 
-// ── TAB SWITCHING ─────────────────────────────────────────────────────────────
-function showTab(id,el){
-  expandedCats.clear();
-  collapsedSections.clear();
-  closeAllDropdowns();
-  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
-  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById(id).classList.add('active');
-  el.classList.add('active');
-  if(id==='projection')buildProjection();
-}
-
-
-// ── UTILITIES ─────────────────────────────────────────────────────────────────
-const SAVING_SECTIONS = ['529s','Kids Cars & Weddings','Savings Goals'];
-const SS={
-  eric:{today:{65:3601,67:4155,70:5152},future:{65:7189,67:8715,70:11638},claimYear:{65:2054,67:2056,70:2059},age:70},
-  mattie:{today:{65:2466,67:2845,70:3528},future:{65:5046,67:6117,70:8168},claimYear:{65:2055,67:2057,70:2060},age:65}
-};
-
-// ── WINDFALL ──────────────────────────────────────────────────────────────────
-function renderWindfall(){
-  const p=planConfig;
-  document.getElementById('windfallContent').innerHTML=
-    '<div class="note"><b>'+(p['windfall_annual']||'$25,927')+'/yr windfall</b> from bonuses and Mattie\'s extra paychecks.</div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Backdoor Roth IRAs</div><div class="badge badge-blue" style="margin-left:auto">Priority #1</div></div>'
-    +'<div class="row"><div class="row-label">Eric Roth IRA</div><div class="row-val">'+(p['windfall_roth_eric']||'$7,500')+'</div></div>'
-    +'<div class="row"><div class="row-label">Mattie Roth IRA</div><div class="row-val">'+(p['windfall_roth_mattie']||'$7,500')+'</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#34c759"></div><div class="block-title">Vacation fund</div><div class="badge badge-green" style="margin-left:auto">Funded</div></div>'
-    +'<div class="row"><div class="row-label">Annual family vacation</div><div class="row-val">'+(p['windfall_vacation']||'$5,000')+'</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff2d55"></div><div class="block-title">Christmas fund</div><div class="badge badge-green" style="margin-left:auto">Funded</div></div>'
-    +'<div class="row"><div class="row-label">Annual gifts &amp; festivities</div><div class="row-val">'+(p['windfall_christmas']||'$2,000')+'</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#8e8e93"></div><div class="block-title">Home projects</div></div>'
-    +'<div class="row"><div class="row-label">Annual top-up</div><div class="row-val">'+(p['windfall_home']||'$1,000')+'</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff9500"></div><div class="block-title">Mattie\'s car fund boost</div></div>'
-    +'<div class="row"><div class="row-label">Toward SUV Dec 2028</div><div class="row-val">'+(p['windfall_car_mattie']||'$1,463')+'</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Emergency fund boost</div></div>'
-    +'<div class="row"><div class="row-label">Annual contribution</div><div class="row-val">'+(p['windfall_emergency']||'$1,464')+'</div></div></div>'
-    +'<div class="alloc-total"><span>Total allocated</span><span>'+(p['windfall_annual']||'$25,927')+'</span></div>';
-}
-
-// ── GOALS ─────────────────────────────────────────────────────────────────────
-function renderGoals(){
-  const p=planConfig;
-  document.getElementById('goalsContent').innerHTML=
-    '<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Emergency fund</div><div class="badge badge-orange" style="margin-left:auto">In progress</div></div>'
-    +'<div class="row"><div class="row-label">Current balance</div><div class="row-val orange">'+(p['emergency_balance']||'$17,500')+'</div></div>'
-    +'<div class="row"><div class="row-label">Target</div><div class="row-val">'+(p['emergency_target']||'$78,000')+'</div></div>'
-    +'<div class="row"><div class="row-label" style="font-weight:600">Est. fully funded</div><div class="row-val green">~Sep 2032 ✓</div></div>'
-    +'<div class="progress-wrap"><div class="progress-labels"><span>Progress</span><span>22%</span></div>'
-    +'<div class="bar-bg2"><div style="width:22%;background:#007aff;height:100%;border-radius:6px"></div></div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff6b35"></div><div class="block-title">Mattie\'s procedures</div><div class="badge badge-orange" style="margin-left:auto">~13 months</div></div>'
-    +'<div class="row"><div class="row-label">Monthly saving</div><div class="row-val">$1,250/mo</div></div>'
-    +'<div class="row"><div class="row-label">Funded by</div><div class="row-val green">~Jul 2027 ✓</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff9500"></div><div class="block-title">Mattie\'s new SUV</div><div class="badge badge-green" style="margin-left:auto">Dec 2028</div></div>'
-    +'<div class="row"><div class="row-label">Purchasing power</div><div class="row-val green">~$65,678</div></div>'
-    +'<div class="note-green" style="margin:0 16px 14px;border-radius:8px">New Suburban/Expedition Max: Fully funded ✓</div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#185fa5"></div><div class="block-title">Eric\'s new car</div><div class="badge badge-blue" style="margin-left:auto">Jan 2029</div></div>'
-    +'<div class="row"><div class="row-label">$1,000/mo · $40k net gap</div><div class="row-val green">~May 2032 ✓</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff3b30"></div><div class="block-title">Kids\' cars ($24k each)</div><div class="badge badge-blue" style="margin-left:auto">Brokerage</div></div>'
-    +'<div class="row"><div class="row-label">Kinsley (Dec 2032)</div><div class="row-val">$152/mo</div></div>'
-    +'<div class="row"><div class="row-label">Kyle (May 2035)</div><div class="row-val">$162/mo</div></div>'
-    +'<div class="row"><div class="row-label">Collins (Jul 2038)</div><div class="row-val">$106/mo</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff2d55"></div><div class="block-title">Weddings ($50k each)</div><div class="badge badge-blue" style="margin-left:auto">Brokerage</div></div>'
-    +'<div class="row"><div class="row-label">Kinsley (~2040)</div><div class="row-val">$167/mo</div></div>'
-    +'<div class="row"><div class="row-label">Collins (~2046)</div><div class="row-val">$96/mo</div></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#af52de"></div><div class="block-title">529s at age 18</div><div class="badge badge-purple" style="margin-left:auto">Projected 7%</div></div>'
-    +'<div class="row"><div class="row-label">Kinsley ($325/mo)</div><div class="row-val purple">~$72,300</div></div>'
-    +'<div class="row"><div class="row-label">Kyle ($200/mo)</div><div class="row-val purple">~$72,600</div></div>'
-    +'<div class="row"><div class="row-label">Collins ($225/mo)</div><div class="row-val purple">~$72,000</div></div></div>';
-}
-
-// ── RETIREMENT ────────────────────────────────────────────────────────────────
-function renderRetirement(){
-  const p=planConfig;
-  document.getElementById('retirementContent').innerHTML=
-    '<div class="note"><b>'+(p['balance_retirement_total']||'$449,000')+'</b> current · <b>'+(p['invested_annual']||'$67,702')+'/yr</b> contributions growing 3%/yr · Monte Carlo 1,000 scenarios (mean 9%, std 15%).</div>'
-    +'<div class="note-blue" style="margin-bottom:14px"><b>Same portfolio</b> — Eric turns 65 a year before Mattie so his milestone shows a slightly lower balance.</div>'
-    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
-    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<div><div style="font-size:14px;font-weight:600">Monte Carlo Simulation</div><div style="font-size:12px;color:#8e8e93">1,000 randomized sequences</div></div>'
-    +'<button onclick="runMonteCarlo()" style="background:#007aff;color:#fff;border:none;border-radius:20px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer">&#9654; Run</button>'
-    +'</div>'
-    +'<div id="mcStatus" style="font-size:13px;color:#8e8e93">Tap Run to simulate 1,000 scenarios.</div></div>'
-    +'<div id="mcResults" style="display:none">'
-    +'<div class="divider">Portfolio at milestone ages</div>'
-    +'<div id="mcCards" class="ret-grid"></div>'
-    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
-    +'<div style="font-size:13px;font-weight:600;margin-bottom:4px">Portfolio growth by percentile</div>'
-    +'<canvas id="mcChart" width="340" height="200" style="width:100%;height:200px"></canvas>'
-    +'<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">'
-    +'<span style="font-size:11px;color:#ff3b30">&#9679; 10th</span>'
-    +'<span style="font-size:11px;color:#ff9500">&#9679; 25th</span>'
-    +'<span style="font-size:11px;color:#007aff;font-weight:600">&#9679; Median</span>'
-    +'<span style="font-size:11px;color:#34c759">&#9679; 75th</span>'
-    +'<span style="font-size:11px;color:#af52de">&#9679; 90th</span>'
-    +'</div></div>'
-    +'<div class="divider">Retirement income · 4.7% withdrawal</div>'
-    +'<div id="mcIncome"></div>'
-    +'<div class="divider">Social Security</div>'
-    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
-    +'<div style="font-size:13px;color:#8e8e93;margin-bottom:12px">Verify at <a href="https://ssa.gov/myaccount" style="color:#007aff">ssa.gov/myaccount</a></div>'
-    +'<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">Eric</div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button class="ss-btn" id="eric-65" onclick="setSS(\'eric\',65)">65</button>'
-    +'<button class="ss-btn" id="eric-67" onclick="setSS(\'eric\',67)">67 (FRA)</button>'
-    +'<button class="ss-btn ss-active" id="eric-70" onclick="setSS(\'eric\',70)">70 &#9733;</button>'
-    +'</div></div>'
-    +'<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">Mattie</div>'
-    +'<div style="display:flex;gap:8px">'
-    +'<button class="ss-btn ss-active" id="mattie-65" onclick="setSS(\'mattie\',65)">65 &#9733;</button>'
-    +'<button class="ss-btn" id="mattie-67" onclick="setSS(\'mattie\',67)">67 (FRA)</button>'
-    +'<button class="ss-btn" id="mattie-70" onclick="setSS(\'mattie\',70)">70</button>'
-    +'</div></div>'
-    +'<div id="ssResults"></div></div>'
-    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Annual investments</div></div>'
-    +'<div class="row"><div class="row-label">401k (both, +3%/yr)</div><div class="row-val">'+(p['contrib_401k']||'$30,000')+'</div></div>'
-    +'<div class="row"><div class="row-label">Employer match</div><div class="row-val green">'+(p['contrib_match']||'$16,302')+'</div></div>'
-    +'<div class="row"><div class="row-label">Backdoor Roth IRAs</div><div class="row-val">'+(p['contrib_roth_ira']||'$15,000')+'</div></div>'
-    +'<div class="row"><div class="row-label">HSA</div><div class="row-val">'+(p['hsa_annual']||'$6,400')+'</div></div>'
-    +'<div class="row"><div class="row-label" style="font-weight:600">Year 1 total</div><div class="row-val blue" style="font-weight:600">'+(p['invested_annual']||'$67,702')+'</div></div>'
-    +'</div></div>';
-  updateSSResults();
-}
-
-// ── MONTE CARLO ───────────────────────────────────────────────────────────────
-function gaussRandom(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
-function runMonteCarlo(){
-  const btn=document.querySelector('button[onclick="runMonteCarlo()"]');
-  btn.textContent='⏳';btn.disabled=true;
-  document.getElementById('mcStatus').textContent='Simulating...';
-  setTimeout(()=>{
-    const p=planConfig;
-    const START=parseFloat((p['balance_retirement_total']||'449000').replace(/[$,]/g,''));
-    const CONTRIB=parseFloat((p['invested_annual']||'67702').replace(/[$,]/g,''));
-    const SIMS=1000,YEARS=29,CG=.03,MEAN=.09,STD=.15;
-    const finalBals=[];const yd=Array.from({length:YEARS},()=>[]);
-    for(let s=0;s<SIMS;s++){let b=START;for(let y=0;y<YEARS;y++){b=b*(1+gaussRandom(MEAN,STD))+CONTRIB*Math.pow(1+CG,y);yd[y].push(b);}finalBals.push(b);}
-    finalBals.sort((a,b)=>a-b);
-    const pct=(a,p)=>a[Math.floor(a.length*p)];
-    const fm=n=>'$'+(n/1e6).toFixed(2)+'M';
-    const fi=n=>'$'+Math.round(n*.047/12).toLocaleString()+'/mo';
-    const ms=[{l:'Eric 60·Mattie 59',y:23},{l:'Eric 62·Mattie 61',y:25},{l:'Eric 65·Mattie 64',y:28},{l:'Mattie 60·Eric 61',y:24},{l:'Mattie 62·Eric 63',y:26},{l:'Mattie 65·Eric 66',y:29}];
-    const meds=ms.map(m=>{const a=[...yd[m.y-1]].sort((a,b)=>a-b);return pct(a,.5);});
-    document.getElementById('mcCards').innerHTML=ms.map((m,i)=>'<div class="ret-card"><div class="ret-age">'+m.l+'</div><div class="ret-val">'+fm(meds[i])+'</div></div>').join('');
-    const med65=meds[2];
-    const p10=pct([...yd[YEARS-1]].sort((a,b)=>a-b),.1);
-    const p90=pct([...yd[YEARS-1]].sort((a,b)=>a-b),.9);
-    document.getElementById('mcIncome').innerHTML='<span id="mcPM" data-m="'+Math.round(med65*.047/12)+'" style="display:none"></span>'
-      +'<div class="block"><div class="block-header"><div class="accent" style="background:#34c759"></div><div class="block-title">4.7% withdrawal · Eric 65</div><div class="badge badge-green" style="margin-left:auto">Median</div></div>'
-      +'<div class="row"><div class="row-label">Portfolio</div><div class="row-val blue">'+fm(med65)+'</div></div>'
-      +'<div class="row"><div class="row-label">Monthly income</div><div class="row-val green" style="font-size:17px;font-weight:700">'+fi(med65)+'</div></div>'
-      +'<div class="row"><div class="row-label">10th %ile</div><div class="row-val orange">'+fi(p10)+'</div></div>'
-      +'<div class="row"><div class="row-label">90th %ile</div><div class="row-val purple">'+fi(p90)+'</div></div>'
-      +'<div class="row"><div class="row-label">Expenses inflated 28yr@3%</div><div class="row-val">~$29,300/mo</div></div></div>';
-    drawMCChart(yd,YEARS);
-    document.getElementById('mcStatus').innerHTML='<span style="color:#34c759;font-weight:600">✓</span> Median: <b>'+fm(pct(finalBals,.5))+'</b>';
-    document.getElementById('mcResults').style.display='block';
-    btn.textContent='↺ Re-run';btn.disabled=false;
-    updateSSResults();
-  },50);
-}
-function drawMCChart(yd,years){
-  const c=document.getElementById('mcChart');if(!c)return;
-  const ctx=c.getContext('2d'),W=c.offsetWidth||340,H=200;
-  c.width=W*devicePixelRatio;c.height=H*devicePixelRatio;c.style.width=W+'px';c.style.height=H+'px';ctx.scale(devicePixelRatio,devicePixelRatio);
-  const pct=(a,p)=>a[Math.floor(a.length*p)];
-  const s=yd.map(y=>[...y].sort((a,b)=>a-b));
-  const p10=[],p25=[],p50=[],p75=[],p90=[];
-  s.forEach(a=>{p10.push(pct(a,.1));p25.push(pct(a,.25));p50.push(pct(a,.5));p75.push(pct(a,.75));p90.push(pct(a,.9));});
-  const mx=Math.max(...p90),pad={l:40,r:8,t:8,b:24},cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
-  const x=i=>pad.l+(i/(years-1))*cw,y=v=>pad.t+ch-(v/mx)*ch;
-  ctx.clearRect(0,0,W,H);
-  ctx.strokeStyle='#f0f0f0';ctx.lineWidth=1;
-  [.25,.5,.75,1].forEach(f=>{const yy=pad.t+ch*(1-f);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(W-pad.r,yy);ctx.stroke();ctx.fillStyle='#8e8e93';ctx.font='9px -apple-system';ctx.textAlign='right';ctx.fillText('$'+(mx*f/1e6).toFixed(1)+'M',pad.l-3,yy+3);});
-  ctx.fillStyle='#8e8e93';ctx.font='9px -apple-system';ctx.textAlign='center';
-  [0,7,14,21,27].forEach(i=>ctx.fillText(2026+i+1,x(i),H-6));
-  ctx.beginPath();ctx.moveTo(x(0),y(p25[0]));for(let i=1;i<years;i++)ctx.lineTo(x(i),y(p25[i]));for(let i=years-1;i>=0;i--)ctx.lineTo(x(i),y(p75[i]));ctx.closePath();ctx.fillStyle='rgba(0,122,255,.08)';ctx.fill();
-  [{d:p10,c:'#ff3b30'},{d:p25,c:'#ff9500'},{d:p50,c:'#007aff',w:2.5},{d:p75,c:'#34c759'},{d:p90,c:'#af52de'}].forEach(({d,c,w=1.5})=>{ctx.beginPath();ctx.strokeStyle=c;ctx.lineWidth=w;d.forEach((v,i)=>i===0?ctx.moveTo(x(i),y(v)):ctx.lineTo(x(i),y(v)));ctx.stroke();});
-}
-
-// ── SOCIAL SECURITY ───────────────────────────────────────────────────────────
-function setSS(p,a){
-  SS[p].age=a;
-  [65,67,70].forEach(x=>{const b=document.getElementById(p+'-'+x);if(b)b.className='ss-btn'+(x===a?' ss-active':'');});
-  updateSSResults();
-}
-function updateSSResults(){
-  const ericToday=SS.eric.today[SS.eric.age];
-  const mattieToday=SS.mattie.today[SS.mattie.age];
-  const ericFuture=SS.eric.future[SS.eric.age];
-  const mattieFuture=SS.mattie.future[SS.mattie.age];
-  const ericYear=SS.eric.claimYear[SS.eric.age];
-  const mattieYear=SS.mattie.claimYear[SS.mattie.age];
-  const combinedFuture=ericFuture+mattieFuture;
-  const f=n=>'$'+n.toLocaleString();
-  const hasRun=document.getElementById('mcIncome')&&document.getElementById('mcIncome').innerHTML.length>10;
-  const note=SS.eric.age===70
-    ?'<div style="font-size:12px;color:#1a7f37;margin-top:8px">&#9733; Waiting until 70 maximizes Eric\'s benefit + survivor protection</div>'
-    :SS.eric.age===65?'<div style="font-size:12px;color:#ff9500;margin-top:8px">&#9888; Claiming at 65 = $1,551/mo less than age 70 in today\'s dollars</div>':'';
-  const el=document.getElementById('ssResults');if(!el)return;
-  el.innerHTML='<div style="border-top:1px solid #f2f2f7;padding-top:10px">'
-    +'<div style="font-size:12px;color:#8e8e93;margin-bottom:8px">Future dollars · 2.5%/yr COLA to claim year</div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
-    +'<div><div style="color:#6e6e73">Eric at '+SS.eric.age+' ('+ericYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(ericToday)+'/mo</div></div>'
-    +'<span style="font-weight:600">'+f(ericFuture)+'/mo</span></div>'
-    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
-    +'<div><div style="color:#6e6e73">Mattie at '+SS.mattie.age+' ('+mattieYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(mattieToday)+'/mo</div></div>'
-    +'<span style="font-weight:600">'+f(mattieFuture)+'/mo</span></div>'
-    +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600;border-bottom:1px solid #f9f9f9">'
-    +'<span>Combined SS (future $)</span><span style="color:#34c759">'+f(combinedFuture)+'/mo</span></div>'
-    +(hasRun
-      ?'<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f9f9f9"><span style="color:#6e6e73">Portfolio (median)</span><span id="ssP">&#8212;</span></div>'
-       +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:700"><span>Total (portfolio + SS)</span><span style="color:#34c759" id="ssT">&#8212;</span></div>'
-       +'<div style="font-size:11px;color:#8e8e93;margin-top:4px">SS begins '+Math.min(ericYear,mattieYear)+'&#8211;'+Math.max(ericYear,mattieYear)+', after the 2054 portfolio milestone</div>'
-      :'<div style="font-size:12px;color:#8e8e93;margin-top:6px">Run Monte Carlo above to see combined total.</div>')
-    +note
-    +'<div style="font-size:11px;color:#8e8e93;margin-top:6px">Verify actual estimates at ssa.gov/myaccount</div></div>';
-  if(hasRun){
-    const pm=document.getElementById('mcPM');
-    if(pm){
-      const v=parseFloat(pm.dataset.m);
-      const ssP=document.getElementById('ssP');
-      const ssT=document.getElementById('ssT');
-      if(ssP)ssP.textContent='$'+Math.round(v).toLocaleString()+'/mo';
-      if(ssT)ssT.textContent='$'+Math.round(v+combinedFuture).toLocaleString()+'/mo';
-    }
-  }
-}
-
-// ── PLAID AUTH ────────────────────────────────────────────────────────────────
-function loadGIS(){return new Promise(r=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=r;s.onerror=()=>{console.error('GIS failed to load');r();};document.head.appendChild(s);});}
-
-async function signIn(){
-  const btn=document.querySelector('#authScreen button');
-  if(btn){btn.textContent='Signing in...';btn.disabled=true;}
-  try{
-    // Wait for GIS to be ready (loaded eagerly in <head>)
-    let attempts=0;
-    while((typeof google==='undefined'||!google.accounts)&&attempts<20){
-      await new Promise(r=>setTimeout(r,250));
-      attempts++;
-    }
-    if(typeof google==='undefined'||!google.accounts){
-      if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
-      alert('Google sign-in unavailable. Check your internet connection.');
-      return;
-    }
-    tokenClient=google.accounts.oauth2.initTokenClient({
-      client_id:CLIENT_ID,
-      scope:SCOPES,
-      callback:async resp=>{
-        if(resp.error){
-          alert('Sign-in failed: '+resp.error);
-          if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
-          return;
-        }
-        accessToken=resp.access_token;
-        localStorage.setItem('gv_token',accessToken);
-        document.getElementById('authScreen').style.display='none';
-        document.getElementById('loadingScreen').style.display='block';
-        await initApp();
-      }
-    });
-    tokenClient.requestAccessToken({prompt:'consent'});
-  }catch(e){
-    console.error('signIn error:',e);
-    alert('Sign-in error: '+e.message);
-    if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
-  }
-}
-
-function signOut(){
-  if(accessToken&&typeof google!=='undefined')google.accounts.oauth2.revoke(accessToken);
-  accessToken=null;localStorage.removeItem('gv_token');
-  document.getElementById('mainApp').style.display='none';
-  document.getElementById('authScreen').style.display='block';
-}
-
-// ── SHEETS API ────────────────────────────────────────────────────────────────
-async function gapi(method,url,body){
-  const r=await fetch(url,{method,headers:{'Authorization':'Bearer '+accessToken,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
-  return r;
-}
-async function readSheet(sid,range){
-  const r=await gapi('GET',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}`);
-  if(r.status===401||r.status===403){
-    accessToken=null;localStorage.removeItem('gv_token');
-    document.getElementById('loadingScreen').style.display='none';
-    document.getElementById('mainApp').style.display='none';
-    document.getElementById('authScreen').style.display='block';
-    throw new Error('Auth expired — please sign in again');
-  }
-  const j=await r.json();return j.values||[];
-}
-async function writeSheet(sid,range,values){
-  await gapi('PUT',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}?valueInputOption=USER_ENTERED`,{range,majorDimension:'ROWS',values});
-}
-async function clearAndWrite(sid,range,values){
-  await gapi('POST',`https://sheets.googleapis.com/v4/spreadsheets/${sid}/values/${encodeURIComponent(range)}:clear`);
-  if(values.length)await writeSheet(sid,range,values);
-}
-
-// ── INIT ──────────────────────────────────────────────────────────────────────
-async function initApp(){
-  try{
-  setLoading('Loading budget config...');
-  console.log('Loading from sheet ID:',BUDGET_SHEET_ID);
-  await loadBudgetConfig();
-  console.log('Budget config loaded:',budgetPlan.length,'categories');
-  setLoading('Loading financial plan...');
-  await loadPlanConfig();
-  setLoading('Loading tracker data...');
-  await loadTrackerData();
-  document.getElementById('loadingScreen').style.display='none';
-  document.getElementById('mainApp').style.display='block';
-  const startIdx=detectCurrentMonthIdx();
-  windowStart=Math.max(0,startIdx-2);
-  renderTracker(startIdx);
-  renderMonthly(startIdx);
-  renderSnapshot();renderWindfall();renderRetirement();renderGoals();
-  }catch(e){
-    console.error('initApp error:',e);
-    setLoadingError(e.message||'Unknown error — check browser console (F12)');
-    throw e;
-  }
-}
-function setLoading(msg){
-  document.getElementById('loadingMsg').textContent=msg;
-  document.getElementById('loadingError').style.display='none';
-}
-function setLoadingError(msg){
-  document.getElementById('loadingMsg').textContent='Something went wrong';
-  const errEl=document.getElementById('loadingError');
-  errEl.textContent=msg;
-  errEl.style.display='block';
-  document.getElementById('loadingSignOutBtn').style.display='block';
-  document.querySelector('.spinner').style.display='none';
-}
-function forceSignOut(){
-  accessToken=null;
-  localStorage.removeItem('gv_token');
-  location.reload();
-}
-
-// ── LOAD CONFIG ───────────────────────────────────────────────────────────────
-async function loadBudgetConfig(){
-  let rows=[];
-  try{rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:T');}
-  catch(e){setLoadingError('Error reading Budget sheet: '+e.message+' (Check console for details)');throw e;}
-  if(rows.length<2){
-    setLoading('Budget sheet empty — setting up...');
-    await setupBudgetSheet();
-    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:T');
-    if(rows.length<2){setLoading('Setup failed — check sheet tab names');throw new Error('Setup failed');}
-  }
-  const headers=rows[0];
-  budgetPlan=rows.slice(1).map(row=>{
-    const obj={};headers.forEach((h,i)=>obj[h]=row[i]||'');
-    obj.amounts={};
-    MONTH_KEYS_BASE.forEach(mk=>{obj.amounts[mk]=parseFloat(obj[mk])||0;});
-    obj.isFixed=obj.Fixed==='TRUE';obj.isSinkingFund=obj.SinkingFund==='TRUE';
-    obj.isSavings=obj.Savings==='TRUE';
-    return obj;
-  }).filter(r=>r.Category);
-}
-
-async function loadPlanConfig(){
-  const rows=await readSheet(PLAN_SHEET_ID,'Plan!A:B');
-  if(rows.length<2){await setupPlanSheet();return loadPlanConfig();}
-  planConfig={};rows.slice(1).forEach(r=>{if(r[0])planConfig[r[0]]=r[1]||'';});
-}
-
-async function loadTrackerData(){
-  const[stateRows,txnRows,sfRows,budgetRows,monthRows]=await Promise.all([
-    readSheet(BUDGET_SHEET_ID,'CategoryState!A:F'),
-    readSheet(BUDGET_SHEET_ID,'Transactions!A:H'),
-    readSheet(BUDGET_SHEET_ID,'SinkingFunds!A:D'),
-    readSheet(BUDGET_SHEET_ID,'TrackerBudgets!A:C'),
-    readSheet(BUDGET_SHEET_ID,'ExtraMonths!A:C'),
-  ]);
-  trackerData={state:{},transactions:{},sinkingFunds:{},splitGroups:{},confirmedPlaidIds:new Set()};
-  trackerBudgets={};
-
-  if(stateRows.length>1)stateRows.slice(1).forEach(r=>{
-    const[month,cat,isSpent,isClosed,col4,col5]=r;
-    if(!month||!cat)return;
-    if(!trackerData.state[month])trackerData.state[month]={};
-    const surplusCovered=r.length>=6?col5:col4;
-    trackerData.state[month][cat]={isSpent:isSpent==='TRUE',isClosed:isClosed==='TRUE',surplusCovered:parseFloat(surplusCovered)||0};
-  });
-
-  if(txnRows.length>1)txnRows.slice(1).forEach(r=>{
-    const[id,month,cat,desc,amt,ts,sgId,autoGen]=r;
-    if(!month||!cat)return;
-    if(!trackerData.transactions[month])trackerData.transactions[month]={};
-    if(!trackerData.transactions[month][cat])trackerData.transactions[month][cat]=[];
-    const txnObj={id,desc,amt:parseFloat(amt)||0,ts,splitGroupId:sgId||null,autoGenerated:autoGen==='TRUE'};
-    trackerData.transactions[month][cat].push(txnObj);
-    if(id&&id.length>8)trackerData.confirmedPlaidIds.add(id);
-  });
-
-  if(sfRows.length>1)sfRows.slice(1).forEach(r=>{
-    if(!r[0])return;
-    if(r[0].startsWith('_sf_'))return;
-    trackerData.sinkingFunds[r[0]]={isActive:r[1]==='TRUE',activeFrom:parseInt(r[2])||0,runningBalance:parseFloat(r[3])||0};
-  });
-
-  if(budgetRows.length>1)budgetRows.slice(1).forEach(r=>{
-    const[month,cat,amt]=r;
-    if(!month||!cat)return;
-    if(!trackerBudgets[month])trackerBudgets[month]={};
-    trackerBudgets[month][cat]=parseFloat(amt)||0;
-  });
-
-  if(monthRows.length>1){
-    monthRows.slice(1).forEach(r=>{
-      const[key,label,yearMonth]=r;
-      if(!key)return;
-      const[year,month]=yearMonth?yearMonth.split('-').map(Number):[2027,8];
-      if(!months.find(m=>m.key===key))months.push({key,label,year,month});
-    });
-  }
-
-  // Load merchant map
-  const mmRows=await readSheet(BUDGET_SHEET_ID,'MerchantMap!A:B');
-  merchantMap={};
-  if(mmRows.length>1)mmRows.slice(1).forEach(r=>{if(r[0]&&r[1])merchantMap[r[0].toLowerCase()]=r[1];});
-}
-
-// ── SAVE ──────────────────────────────────────────────────────────────────────
-function scheduleSave(){setSyncStatus('syncing');clearTimeout(syncTimer);syncTimer=setTimeout(saveAll,1500);}
-function setSyncStatus(s){
-  const d=document.getElementById('syncDot'),t=document.getElementById('syncStatus');
-  if(!d||!t)return;
-  d.className='sync-dot'+(s==='syncing'?' syncing':s==='error'?' error':'');
-  t.textContent=s==='syncing'?'Saving...':s==='error'?'Error':'Saved';
-}
-
-async function saveAll(){
-  try{
-    const stateRows=[['Month','Category','IsSpent','IsClosed','SurplusCovered']];
-    Object.entries(trackerData.state).forEach(([month,cats])=>{
-      Object.entries(cats).forEach(([cat,s])=>{
-        stateRows.push([month,cat,s.isSpent?'TRUE':'FALSE',s.isClosed?'TRUE':'FALSE',s.surplusCovered||0]);
-      });
-    });
-
-    const txnRows=[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']];
-    Object.entries(trackerData.transactions).forEach(([month,cats])=>{
-      Object.entries(cats).forEach(([cat,txns])=>{
-        txns.forEach(t=>txnRows.push([t.id,month,cat,t.desc,t.amt,t.ts,t.splitGroupId||'',t.autoGenerated?'TRUE':'FALSE']));
-      });
-    });
-
-    const sfRows=[['Category','IsActive','ActiveFrom','RunningBalance']];
-    Object.entries(trackerData.sinkingFunds).forEach(([cat,rec])=>{
-      if(typeof rec==='object')sfRows.push([cat,rec.isActive?'TRUE':'FALSE',rec.activeFrom||0,rec.runningBalance||0]);
-    });
-
-    const budgetRows=[['Month','Category','Amount']];
-    Object.entries(trackerBudgets).forEach(([month,cats])=>{
-      Object.entries(cats).forEach(([cat,amt])=>budgetRows.push([month,cat,amt]));
-    });
-
-    const extraMonthRows=[['Key','Label','YearMonth']];
-    months.slice(BASE_MONTHS.length).forEach(m=>extraMonthRows.push([m.key,m.label,`${m.year}-${m.month}`]));
-
-    const mmRows2=[['Merchant','Category']];
-    Object.entries(merchantMap).forEach(([m,c])=>mmRows2.push([m,c]));
-
-    await Promise.all([
-      clearAndWrite(BUDGET_SHEET_ID,'CategoryState!A1',stateRows),
-      clearAndWrite(BUDGET_SHEET_ID,'Transactions!A1',txnRows),
-      clearAndWrite(BUDGET_SHEET_ID,'SinkingFunds!A1',sfRows),
-      clearAndWrite(BUDGET_SHEET_ID,'TrackerBudgets!A1',budgetRows),
-      clearAndWrite(BUDGET_SHEET_ID,'ExtraMonths!A1',extraMonthRows),
-      clearAndWrite(BUDGET_SHEET_ID,'MerchantMap!A1',mmRows2),
-    ]);
-    setSyncStatus('ok');
-  }catch(e){setSyncStatus('error');console.error(e);}
-}
-
-// ── SETUP SHEETS ──────────────────────────────────────────────────────────────
-async function setupBudgetSheet(){
-  try{
-    setLoading('Setting up Budget sheet...');
-    const h=['Category','Section','Color','Fixed','SinkingFund','Savings',...MONTH_KEYS_BASE];
-    await clearAndWrite(BUDGET_SHEET_ID,'Budget!A1',[h,...DEFAULT_BUDGET_DATA]);
-    await clearAndWrite(BUDGET_SHEET_ID,'CategoryState!A1',[['Month','Category','IsSpent','IsClosed','SurplusCovered']]);
-    await clearAndWrite(BUDGET_SHEET_ID,'Transactions!A1',[['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']]);
-    await clearAndWrite(BUDGET_SHEET_ID,'SinkingFunds!A1',[['Category','IsActive','ActiveFrom','RunningBalance']]);
-    await clearAndWrite(BUDGET_SHEET_ID,'TrackerBudgets!A1',[['Month','Category','Amount']]);
-    await clearAndWrite(BUDGET_SHEET_ID,'ExtraMonths!A1',[['Key','Label','YearMonth']]);
-  }catch(e){setLoading('Sheet setup error: '+e.message+' — check tab names');throw e;}
-}
-async function setupPlanSheet(){
-  setLoading('Setting up Plan sheet...');
-  await clearAndWrite(PLAN_SHEET_ID,'Plan!A1',[['Key','Value'],...DEFAULT_PLAN_DATA]);
-}
-
-// ── DEFAULT DATA ──────────────────────────────────────────────────────────────
-const DEFAULT_BUDGET_DATA=[
-  ['Mortgage','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400,4400],
-  ['Car payment','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,648,648,648,648,648,648,648,648,648,648,648,648,648],
-  ['Car insurance','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Internet','Housing & Transport','#007aff','TRUE','FALSE','FALSE',0,69,69,69,69,69,69,69,69,69,69,69,69,69],
-  ['Electricity','Utilities','#ff9500','FALSE','FALSE','FALSE',0,700,550,450,380,320,300,300,380,420,480,550,700,700],
-  ['Water','Utilities','#ff9500','TRUE','FALSE','FALSE',0,175,175,175,175,175,175,175,175,175,175,175,175,175],
-  ['Natural gas','Utilities','#ff9500','FALSE','FALSE','FALSE',0,75,100,130,160,190,200,200,150,120,100,75,75,75],
-  ['Groceries','Food','#34c759','FALSE','FALSE','FALSE',0,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000,1000],
-  ['Dining out','Food','#34c759','FALSE','FALSE','FALSE',0,900,900,900,900,900,900,900,900,900,900,900,900,900],
-  ['Daycare','Kids','#ff3b30','FALSE','FALSE','FALSE',0,687.5,0,0,0,0,687.5,687.5,687.5,687.5,687.5,0,0,0],
-  ['Kids clothes & items','Kids','#ff3b30','FALSE','TRUE','FALSE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
-  ['Sports dues','Kids','#ff3b30','FALSE','TRUE','FALSE',0,0,375,375,83,83,83,0,0,0,0,0,0,0],
-  ['Housekeeper','Home','#8e8e93','TRUE','FALSE','FALSE',0,320,320,320,320,320,320,320,320,320,320,320,320,320],
-  ['Lawn care','Home','#8e8e93','TRUE','FALSE','FALSE',0,200,200,200,200,200,200,200,200,200,200,200,200,200],
-  ['Home expenses','Home','#8e8e93','FALSE','TRUE','FALSE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
-  ['HOA','Home','#8e8e93','TRUE','FALSE','FALSE',0,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67,131.67],
-  ['Grooming','Pet','#ff6b35','TRUE','FALSE','FALSE',0,80,80,80,80,80,80,80,80,80,80,80,80,80],
-  ['Pet food & misc','Pet','#ff6b35','FALSE','FALSE','FALSE',0,20,20,20,20,20,20,20,20,20,20,20,20,20],
-  ['Gym','Lifestyle','#af52de','TRUE','FALSE','FALSE',0,388,388,388,388,388,388,388,388,388,388,388,510,510],
-  ['Streaming','Lifestyle','#af52de','TRUE','FALSE','FALSE',0,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96,120.96],
-  ['Gas/fuel','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Toll roads','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,75,75,75,75,75,75,75,75,75,75,75,75,75],
-  ['Haircuts','Lifestyle','#af52de','FALSE','TRUE','FALSE',0,60,60,300,60,300,60,60,300,60,300,60,300,300],
-  ['Date night','Lifestyle','#af52de','FALSE','FALSE','FALSE',0,250,250,250,250,250,250,250,250,250,250,250,250,250],
-  ['Personal (Eric)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',0,400,400,400,400,400,400,400,400,400,400,400,400,400],
-  ['Personal (Mattie)','Personal & Giving','#5856d6','FALSE','FALSE','FALSE',0,420,420,420,420,420,420,420,420,420,420,420,420,420],
-  ['Life insurance','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',0,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02,78.02],
-  ['Tithe','Personal & Giving','#5856d6','TRUE','FALSE','FALSE',0,800,800,800,800,800,900,900,900,900,900,900,900,900],
-  ['Kinsley 529','529s','#af52de','TRUE','FALSE','TRUE',0,325,325,325,325,325,325,325,325,325,325,325,325,325],
-  ['Kyle 529','529s','#af52de','TRUE','FALSE','TRUE',0,200,200,200,200,200,200,200,200,200,200,200,200,200],
-  ['Collins 529','529s','#af52de','TRUE','FALSE','TRUE',0,225,225,225,225,225,225,225,225,225,225,225,225,225],
-  ['Kinsley car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,152,152,152,152,152,152,152,152,152,152,152,152,152],
-  ['Kyle car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,162,162,162,162,162,162,162,162,162,162,162,162,162],
-  ['Collins car','Kids Cars & Weddings','#ff3b30','TRUE','FALSE','TRUE',0,106,106,106,106,106,106,106,106,106,106,106,106,106],
-  ['Kinsley wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',0,167,167,167,167,167,167,167,167,167,167,167,167,167],
-  ['Collins wedding','Kids Cars & Weddings','#ff2d55','TRUE','FALSE','TRUE',0,96,96,96,96,96,96,96,96,96,96,96,96,96],
-  ['Mattie procedures','Savings Goals','#ff6b35','TRUE','FALSE','TRUE',0,1250,1250,1250,1250,1250,1250,0,0,0,0,0,0,0],
-  ['Mattie car fund','Savings Goals','#ff9500','TRUE','FALSE','TRUE',0,433,433,433,433,433,433,1683,1683,1683,1683,1683,1683,1683],
-  ['Home projects fund','Savings Goals','#8e8e93','FALSE','TRUE','TRUE',0,300,300,300,300,300,300,300,300,300,300,300,300,300],
-  ['Christmas fund','Savings Goals','#ff2d55','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-  ['Emergency fund','Savings Goals','#34c759','FALSE','FALSE','TRUE',0,0,0,0,0,0,0,0,0,0,0,0,0,0],
-];
-
-const DEFAULT_PLAN_DATA=[
-  ['income_monthly','$16,583.30'],['windfall_annual','$25,927'],['invested_annual','$67,702'],
-  ['balance_401k','$370,000'],['balance_roth','$50,000'],['balance_aftertax','$26,000'],
-  ['balance_hsa','$3,000'],['balance_retirement_total','$449,000'],
-  ['emergency_balance','$17,500'],['emergency_target','$78,000'],
-  ['529_kinsley','$15,500'],['529_kyle','$16,000'],['529_collins','$3,000'],
-  ['hsa_annual','$6,400'],['contrib_401k','$30,000'],['contrib_match','$16,302'],
-  ['contrib_roth_ira','$15,000'],['windfall_roth_eric','$7,500'],['windfall_roth_mattie','$7,500'],
-  ['windfall_vacation','$5,000'],['windfall_christmas','$2,000'],['windfall_home','$1,000'],
-  ['windfall_car_mattie','$1,463'],['windfall_emergency','$1,464'],
-  ['car_mattie_saved','$4,300'],['eric_age','37'],['mattie_age','36'],
-];
-
-// ── AUTO DETECT MONTH ─────────────────────────────────────────────────────────
-function detectCurrentMonthIdx(){
-  const today=new Date();
-  const ty=today.getFullYear(),tm=today.getMonth()+1;
-  const idx=months.findIndex(m=>m.year===ty&&m.month===tm);
-  if(idx!==-1)return idx;
-  const first=months[0];
-  if(ty<first.year||(ty===first.year&&tm<first.month))return 0;
-  return months.length-1;
-}
-
-// ── BOOT ──────────────────────────────────────────────────────────────────────
-(async()=>{
-  const saved=localStorage.getItem('gv_token');
-  if(saved){
-    await loadGIS();
-    accessToken=saved;
-    document.getElementById('authScreen').style.display='none';
-    document.getElementById('loadingScreen').style.display='block';
-    try{await initApp();}
-    catch(e){
-      console.error('Init error:',e.message);
-      if(!document.getElementById('authScreen').style.display||document.getElementById('authScreen').style.display==='none'){
-        accessToken=null;localStorage.removeItem('gv_token');
-        document.getElementById('loadingScreen').style.display='none';
-        document.getElementById('authScreen').style.display='block';
-      }
-    }
-  }
-})();
-</script>
-</body>
-</html>
+>
