@@ -5,6 +5,7 @@
 <meta charset="UTF-8">
 <title>Givens Family Finances</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Family $">
 <link rel="apple-touch-icon" href="icon.png">
@@ -1463,14 +1464,20 @@ async function signIn(){
   const btn=document.querySelector('#authScreen button');
   if(btn){btn.textContent='Signing in...';btn.disabled=true;}
   try{
-    await loadGIS();
+    // Wait for GIS to be ready (loaded eagerly in <head>)
+    let attempts=0;
+    while((typeof google==='undefined'||!google.accounts)&&attempts<20){
+      await new Promise(r=>setTimeout(r,250));
+      attempts++;
+    }
     if(typeof google==='undefined'||!google.accounts){
-      alert('Google sign-in failed to load. Please check your internet connection and try again.');
       if(btn){btn.textContent='Sign in with Google';btn.disabled=false;}
+      alert('Google sign-in unavailable. Check your internet connection.');
       return;
     }
     tokenClient=google.accounts.oauth2.initTokenClient({
-      client_id:CLIENT_ID,scope:SCOPES,
+      client_id:CLIENT_ID,
+      scope:SCOPES,
       callback:async resp=>{
         if(resp.error){
           alert('Sign-in failed: '+resp.error);
