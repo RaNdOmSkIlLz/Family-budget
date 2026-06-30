@@ -179,6 +179,9 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .proj-income,.proj-exp,.proj-sav{flex:1;font-size:13px;font-variant-numeric:tabular-nums}
 .proj-rem{flex:1;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 </style>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 </head>
 <body>
 
@@ -276,13 +279,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 <div id="ddOverlay" style="display:none;position:fixed;inset:0;z-index:49" onclick="closeAllDropdowns()"></div>
 
 <script>
+const MONTH_KEYS_BASE=['Jun26','Jul26','Aug26','Sep26','Oct26','Nov26','Dec26','Jan27','Feb27','Mar27','Apr27','May27','Jun27','Jul27'];
 // ── CONFIG ────────────────────────────────────────────────────────────────────
 const CLIENT_ID='405165249389-5l1b5qgvle2usoi9339tva7hsdp0it87.apps.googleusercontent.com';
 const BUDGET_SHEET_ID='1D_XgQLNrHjhiXB-CYofe1ebRZ_EZNn45f9r4Ep0nolg';
 const PLAN_SHEET_ID='104QB8VvA_S40JQtfCdHeln2WsamoenJFSblBzAQGuDg';
 const SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const PLAID_SERVER='https://family-budget-server.vercel.app';
-const MONTH_KEYS_BASE=['Jun26','Jul26','Aug26','Sep26','Oct26','Nov26','Dec26','Jan27','Feb27','Mar27','Apr27','May27','Jun27','Jul27'];
 const WINDOW_SIZE=6;
 const BASE_MONTHS=[
   {key:'Jun26',label:"Jun '26",year:2026,month:6},
