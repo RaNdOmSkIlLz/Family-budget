@@ -276,6 +276,7 @@ const CLIENT_ID='405165249389-5l1b5qgvle2usoi9339tva7hsdp0it87.apps.googleuserco
 const BUDGET_SHEET_ID='1D_XgQLNrHjhiXB-CYofe1ebRZ_EZNn45f9r4Ep0nolg';
 const PLAN_SHEET_ID='104QB8VvA_S40JQtfCdHeln2WsamoenJFSblBzAQGuDg';
 const SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
+const PLAID_SERVER='https://family-budget-rust.vercel.app';
 const WINDOW_SIZE=6;
 const SAVING_SECTIONS=['529s','Kids Cars & Weddings','Savings Goals'];
 const BASE_MONTHS=[
@@ -986,29 +987,169 @@ function buildProjection(){
 }
 
 // ── SNAPSHOT / WINDFALL / GOALS ───────────────────────────────────────────────
+// ── PLAID ─────────────────────────────────────────────────────────────────────
+let plaidLoaded = false;
+
+function loadPlaidScript() {
+  return new Promise(resolve => {
+    if (plaidLoaded) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+    s.onload = () => { plaidLoaded = true; resolve(); };
+    document.head.appendChild(s);
+  });
+}
+
+async function connectAccount() {
+  const btn = document.getElementById('plaidConnectBtn');
+  btn.textContent = '⏳ Loading...';
+  btn.disabled = true;
+  try {
+    await loadPlaidScript();
+    // Get link token from our Vercel server
+    const r = await fetch(PLAID_SERVER + '/api/create-link-token', { method: 'POST' });
+    const { link_token, error } = await r.json();
+    if (error) throw new Error(JSON.stringify(error));
+
+    // Open Plaid Link
+    const handler = Plaid.create({
+      token: link_token,
+      onSuccess: async (public_token, metadata) => {
+        const institution = metadata.institution?.name || 'Unknown';
+        document.getElementById('plaidStatus').textContent = 'Saving ' + institution + '...';
+        const ex = await fetch(PLAID_SERVER + '/api/exchange-token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ public_token, institution_name: institution })
+        });
+        const exRes = await ex.json();
+        if (exRes.success) {
+          document.getElementById('plaidStatus').textContent = institution + ' connected ✓';
+          await syncBalances();
+        } else {
+          document.getElementById('plaidStatus').textContent = 'Error: ' + JSON.stringify(exRes.error);
+        }
+      },
+      onExit: (err) => {
+        if (err) document.getElementById('plaidStatus').textContent = 'Error: ' + err.display_message;
+        btn.textContent = '+ Connect Account';
+        btn.disabled = false;
+      },
+    });
+    handler.open();
+    btn.textContent = '+ Connect Account';
+    btn.disabled = false;
+  } catch (e) {
+    document.getElementById('plaidStatus').textContent = 'Error: ' + e.message;
+    btn.textContent = '+ Connect Account';
+    btn.disabled = false;
+  }
+}
+
+async function syncBalances() {
+  const syncBtn = document.getElementById('plaidSyncBtn');
+  if (syncBtn) { syncBtn.textContent = '⏳ Syncing...'; syncBtn.disabled = true; }
+  const statusEl = document.getElementById('plaidStatus');
+  if (statusEl) statusEl.textContent = 'Fetching balances...';
+  try {
+    const r = await fetch(PLAID_SERVER + '/api/get-balances');
+    const { accounts, message, error } = await r.json();
+    if (error) throw new Error(JSON.stringify(error));
+    if (message && !accounts?.length) {
+      if (statusEl) statusEl.textContent = message;
+      if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
+      return;
+    }
+    renderPlaidAccounts(accounts || []);
+    if (statusEl) statusEl.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
+    if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = 'Sync error: ' + e.message;
+    if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
+  }
+}
+
+function renderPlaidAccounts(accounts) {
+  const el = document.getElementById('plaidAccountsList');
+  if (!el) return;
+  if (!accounts.length) {
+    el.innerHTML = '<p style="font-size:13px;color:#8e8e93;padding:12px 0">No accounts connected yet.</p>';
+    return;
+  }
+
+  // Group by institution
+  const byInst = {};
+  accounts.forEach(a => {
+    if (!byInst[a.institution]) byInst[a.institution] = [];
+    byInst[a.institution].push(a);
+  });
+
+  // Compute totals by type
+  let totalRetirement = 0, totalBrokerage = 0, totalHsa = 0, totalOther = 0;
+  accounts.forEach(a => {
+    const bal = a.balance || 0;
+    const sub = (a.subtype || '').toLowerCase();
+    const type = (a.type || '').toLowerCase();
+    if (sub.includes('401') || sub.includes('ira') || sub.includes('retirement') || type === 'investment') totalRetirement += bal;
+    else if (sub.includes('hsa')) totalHsa += bal;
+    else if (type === 'brokerage' || sub === 'brokerage') totalBrokerage += bal;
+    else totalOther += bal;
+  });
+
+  let html = '';
+
+  // Summary cards
+  html += '<div class="card4" style="margin-bottom:14px">';
+  if (totalRetirement) html += '<div class="card2"><div class="card-label">Retirement</div><div class="card-value blue">' + fmt(totalRetirement) + '</div></div>';
+  if (totalBrokerage) html += '<div class="card2"><div class="card-label">Brokerage</div><div class="card-value">' + fmt(totalBrokerage) + '</div></div>';
+  if (totalHsa) html += '<div class="card2"><div class="card-label">HSA</div><div class="card-value">' + fmt(totalHsa) + '</div></div>';
+  html += '</div>';
+
+  // Accounts by institution
+  Object.entries(byInst).forEach(([inst, accts]) => {
+    html += '<div class="section"><div class="sec-hdr"><div class="sec-title">' + inst + '</div></div>';
+    accts.forEach(a => {
+      if (a.error) {
+        html += '<div class="brow"><div class="brow-label" style="color:#ff3b30">' + a.error + '</div></div>';
+        return;
+      }
+      html += '<div class="brow"><div class="brow-top">'
+        + '<div class="brow-label">' + (a.officialName || a.name)
+        + '<div class="brow-sub">' + (a.subtype || a.type) + '</div></div>'
+        + '<div class="brow-amounts"><span class="brow-actual">' + fmt(a.balance || 0) + '</span></div>'
+        + '</div></div>';
+    });
+    html += '</div>';
+  });
+
+  el.innerHTML = html;
+}
+
 function renderSnapshot(){
   const p=planConfig;
-  document.getElementById('snapshotContent').innerHTML=`
-    <div class="card4">
-      <div class="card2"><div class="card-label">Monthly income</div><div class="card-value blue">${p['income_monthly']||'$16,583'}</div></div>
-      <div class="card2"><div class="card-label">Annual windfall</div><div class="card-value orange">${p['windfall_annual']||'$25,927'}</div></div>
-      <div class="card2"><div class="card-label">Invested/year</div><div class="card-value purple">${p['invested_annual']||'$67,702'}</div><div class="card-sub">Incl. employer match</div></div>
-      <div class="card2"><div class="card-label">Emergency fund</div><div class="card-value orange">${p['emergency_balance']||'$17,500'}</div><div class="card-sub">Target: ${p['emergency_target']||'$78,000'}</div></div>
-    </div>
-    <div class="divider">Retirement accounts</div>
-    <div class="card4">
-      <div class="card2"><div class="card-label">401k accounts</div><div class="card-value">${p['balance_401k']||'$370,000'}</div></div>
-      <div class="card2"><div class="card-label">Roth accounts</div><div class="card-value">${p['balance_roth']||'$50,000'}</div></div>
-      <div class="card2"><div class="card-label">After-tax</div><div class="card-value">${p['balance_aftertax']||'$26,000'}</div></div>
-      <div class="card2"><div class="card-label">HSA</div><div class="card-value">${p['balance_hsa']||'$3,000'}</div><div class="card-sub">+${p['hsa_annual']||'$6,400'}/yr</div></div>
-      <div class="card2 full"><div class="card-label">Total retirement</div><div class="card-value blue">${p['balance_retirement_total']||'$449,000'}</div></div>
-    </div>
-    <div class="divider">529 accounts</div>
-    <div class="card4">
-      <div class="card2"><div class="card-label">Kinsley (9.5)</div><div class="card-value">${p['529_kinsley']||'$15,500'}</div><div class="card-sub">8.5 yrs to college</div></div>
-      <div class="card2"><div class="card-label">Kyle (7.1)</div><div class="card-value">${p['529_kyle']||'$16,000'}</div><div class="card-sub">10.9 yrs to college</div></div>
-      <div class="card2 full"><div class="card-label">Collins (4.0)</div><div class="card-value">${p['529_collins']||'$3,000'}</div><div class="card-sub">14 yrs to college</div></div>
-    </div>`;
+  document.getElementById('snapshotContent').innerHTML=
+    '<div class="card4">'
+    +'<div class="card2"><div class="card-label">Monthly income</div><div class="card-value blue">'+(p['income_monthly']||'$16,583')+'</div></div>'
+    +'<div class="card2"><div class="card-label">Annual windfall</div><div class="card-value orange">'+(p['windfall_annual']||'$25,927')+'</div></div>'
+    +'<div class="card2"><div class="card-label">Invested/year</div><div class="card-value purple">'+(p['invested_annual']||'$67,702')+'</div><div class="card-sub">Incl. employer match</div></div>'
+    +'<div class="card2"><div class="card-label">Emergency fund</div><div class="card-value orange">'+(p['emergency_balance']||'$17,500')+'</div><div class="card-sub">Target: '+(p['emergency_target']||'$78,000')+'</div></div>'
+    +'</div>'
+    +'<div class="divider">529 accounts</div>'
+    +'<div class="card4">'
+    +'<div class="card2"><div class="card-label">Kinsley (9.5)</div><div class="card-value">'+(p['529_kinsley']||'$15,500')+'</div><div class="card-sub">8.5 yrs to college</div></div>'
+    +'<div class="card2"><div class="card-label">Kyle (7.1)</div><div class="card-value">'+(p['529_kyle']||'$16,000')+'</div><div class="card-sub">10.9 yrs to college</div></div>'
+    +'<div class="card2 full"><div class="card-label">Collins (4.0)</div><div class="card-value">'+(p['529_collins']||'$3,000')+'</div><div class="card-sub">14 yrs to college</div></div>'
+    +'</div>'
+    +'<div class="divider">Connected accounts</div>'
+    +'<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">'
+    +'<button id="plaidConnectBtn" class="btn-xs btn-add" style="font-size:13px;padding:8px 16px" onclick="connectAccount()">+ Connect Account</button>'
+    +'<button id="plaidSyncBtn" class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;font-size:13px;padding:8px 16px" onclick="syncBalances()">↺ Sync Balances</button>'
+    +'</div>'
+    +'<p id="plaidStatus" style="font-size:12px;color:#8e8e93;margin-bottom:12px"></p>'
+    +'<div id="plaidAccountsList"></div>';
+
+  // Auto-sync if we have tokens
+  syncBalances();
 }
 
 function renderWindfall(){
