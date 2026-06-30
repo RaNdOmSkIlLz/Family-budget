@@ -193,6 +193,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 <div id="loadingScreen">
   <div class="spinner"></div>
   <p id="loadingMsg" style="font-size:14px;color:#6e6e73">Loading...</p>
+  <p id="loadingError" style="font-size:13px;color:#ff3b30;margin-top:12px;padding:0 20px;display:none"></p>
+  <button id="loadingSignOutBtn" onclick="forceSignOut()" style="display:none;margin-top:16px;background:#f2f2f7;color:#3a3a3c;border:none;border-radius:12px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">Sign out and try again</button>
 </div>
 
 <div id="mainApp" style="display:none">
@@ -1532,6 +1534,7 @@ async function clearAndWrite(sid,range,values){
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function initApp(){
+  try{
   setLoading('Loading budget config...');
   console.log('Loading from sheet ID:',BUDGET_SHEET_ID);
   await loadBudgetConfig();
@@ -1547,14 +1550,35 @@ async function initApp(){
   renderTracker(startIdx);
   renderMonthly(startIdx);
   renderSnapshot();renderWindfall();renderRetirement();renderGoals();
+  }catch(e){
+    console.error('initApp error:',e);
+    setLoadingError(e.message||'Unknown error — check browser console (F12)');
+    throw e;
+  }
 }
-function setLoading(msg){document.getElementById('loadingMsg').textContent=msg;}
+function setLoading(msg){
+  document.getElementById('loadingMsg').textContent=msg;
+  document.getElementById('loadingError').style.display='none';
+}
+function setLoadingError(msg){
+  document.getElementById('loadingMsg').textContent='Something went wrong';
+  const errEl=document.getElementById('loadingError');
+  errEl.textContent=msg;
+  errEl.style.display='block';
+  document.getElementById('loadingSignOutBtn').style.display='block';
+  document.querySelector('.spinner').style.display='none';
+}
+function forceSignOut(){
+  accessToken=null;
+  localStorage.removeItem('gv_token');
+  location.reload();
+}
 
 // ── LOAD CONFIG ───────────────────────────────────────────────────────────────
 async function loadBudgetConfig(){
   let rows=[];
   try{rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:T');}
-  catch(e){setLoading('Error reading Budget sheet: '+e.message);throw e;}
+  catch(e){setLoadingError('Error reading Budget sheet: '+e.message+' (Check console for details)');throw e;}
   if(rows.length<2){
     setLoading('Budget sheet empty — setting up...');
     await setupBudgetSheet();
