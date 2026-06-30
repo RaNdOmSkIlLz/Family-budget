@@ -1007,7 +1007,7 @@ async function connectAccount() {
   try {
     await loadPlaidScript();
     // Get link token from our Vercel server
-    const r = await fetch(PLAID_SERVER + '/api/create-link-token', { method: 'POST' });
+    const r = await fetch(PLAID_SERVER + '/api/create-link-token');
     const { link_token, error } = await r.json();
     if (error) throw new Error(JSON.stringify(error));
 
