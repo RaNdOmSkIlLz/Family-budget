@@ -230,7 +230,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
   </div>
 
   <div class="view" id="projection">
-    <p style="font-size:13px;color:#6e6e73;margin-bottom:16px">Aug 2026 – Jul 2027 plan · Raises applied Jan & Jun 2027</p>
+    <p style="font-size:13px;color:#6e6e73;margin-bottom:16px">Jul 2026 – Jul 2027 plan · Raises applied Jan & Jun 2027</p>
     <div class="proj-table">
       <div class="proj-row hdr">
         <div class="proj-month">Month</div>
@@ -279,6 +279,7 @@ const SCOPES='https://www.googleapis.com/auth/spreadsheets https://www.googleapi
 const WINDOW_SIZE=6;
 const SAVING_SECTIONS=['529s','Kids Cars & Weddings','Savings Goals'];
 const BASE_MONTHS=[
+  {key:'Jul26',label:"Jul '26",year:2026,month:7},
   {key:'Aug26',label:"Aug '26",year:2026,month:8},
   {key:'Sep26',label:"Sep '26",year:2026,month:9},
   {key:'Oct26',label:"Oct '26",year:2026,month:10},
@@ -957,7 +958,7 @@ function renderMonthly(idx){
 
 // ── PROJECTION ────────────────────────────────────────────────────────────────
 function buildProjection(){
-  const RAISE={4:null,5:'Eric +3%',9:null,10:"Mattie +3.5%"};
+  const RAISE={5:'Eric +3%',11:"Mattie +3.5%"};
   let tI=0,tE=0,tS=0,tR=0;
   document.getElementById('projRows').innerHTML=BASE_MONTHS.map((mo,idx)=>{
     const inc=getIncome(idx).total;
@@ -977,7 +978,7 @@ function buildProjection(){
       <div class="proj-rem" style="color:#34c759">${fmt(rem)}</div></div>`;
   }).join('');
   document.getElementById('projSummary').innerHTML=`
-    <div style="font-size:13px;font-weight:600;margin-bottom:10px">12-Month Totals (Plan)</div>
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">13-Month Totals (Plan)</div>
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total income</span><span style="color:#007aff;font-weight:500">${fmt(tI)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total expenses</span><span style="font-weight:500">${fmt(tE)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total savings</span><span style="color:#af52de;font-weight:500">${fmt(tS)}</span></div>
@@ -1305,7 +1306,7 @@ const MONTH_KEYS_BASE=['Aug26','Sep26','Oct26','Nov26','Dec26','Jan27','Feb27','
 async function loadBudgetConfig(){
   let rows=[];
   try{
-    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:R');
+    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:S');
   }catch(e){
     setLoading('Error reading Budget sheet: '+e.message);
     throw e;
@@ -1313,7 +1314,7 @@ async function loadBudgetConfig(){
   if(rows.length<2){
     setLoading('Budget sheet empty — setting up (this only happens once)...');
     await setupBudgetSheet();
-    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:R');
+    rows=await readSheet(BUDGET_SHEET_ID,'Budget!A:S');
     if(rows.length<2){setLoading('Setup failed — please check sheet permissions');throw new Error('Setup failed');}
   }
   const headers=rows[0];
