@@ -1474,6 +1474,224 @@ function showTab(id,el){
   if(id==='projection')buildProjection();
 }
 
+
+// ── UTILITIES ─────────────────────────────────────────────────────────────────
+const SAVING_SECTIONS = ['529s','Kids Cars & Weddings','Savings Goals'];
+const SS={
+  eric:{today:{65:3601,67:4155,70:5152},future:{65:7189,67:8715,70:11638},claimYear:{65:2054,67:2056,70:2059},age:70},
+  mattie:{today:{65:2466,67:2845,70:3528},future:{65:5046,67:6117,70:8168},claimYear:{65:2055,67:2057,70:2060},age:65}
+};
+
+// ── WINDFALL ──────────────────────────────────────────────────────────────────
+function renderWindfall(){
+  const p=planConfig;
+  document.getElementById('windfallContent').innerHTML=
+    '<div class="note"><b>'+(p['windfall_annual']||'$25,927')+'/yr windfall</b> from bonuses and Mattie\'s extra paychecks.</div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Backdoor Roth IRAs</div><div class="badge badge-blue" style="margin-left:auto">Priority #1</div></div>'
+    +'<div class="row"><div class="row-label">Eric Roth IRA</div><div class="row-val">'+(p['windfall_roth_eric']||'$7,500')+'</div></div>'
+    +'<div class="row"><div class="row-label">Mattie Roth IRA</div><div class="row-val">'+(p['windfall_roth_mattie']||'$7,500')+'</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#34c759"></div><div class="block-title">Vacation fund</div><div class="badge badge-green" style="margin-left:auto">Funded</div></div>'
+    +'<div class="row"><div class="row-label">Annual family vacation</div><div class="row-val">'+(p['windfall_vacation']||'$5,000')+'</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff2d55"></div><div class="block-title">Christmas fund</div><div class="badge badge-green" style="margin-left:auto">Funded</div></div>'
+    +'<div class="row"><div class="row-label">Annual gifts &amp; festivities</div><div class="row-val">'+(p['windfall_christmas']||'$2,000')+'</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#8e8e93"></div><div class="block-title">Home projects</div></div>'
+    +'<div class="row"><div class="row-label">Annual top-up</div><div class="row-val">'+(p['windfall_home']||'$1,000')+'</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff9500"></div><div class="block-title">Mattie\'s car fund boost</div></div>'
+    +'<div class="row"><div class="row-label">Toward SUV Dec 2028</div><div class="row-val">'+(p['windfall_car_mattie']||'$1,463')+'</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Emergency fund boost</div></div>'
+    +'<div class="row"><div class="row-label">Annual contribution</div><div class="row-val">'+(p['windfall_emergency']||'$1,464')+'</div></div></div>'
+    +'<div class="alloc-total"><span>Total allocated</span><span>'+(p['windfall_annual']||'$25,927')+'</span></div>';
+}
+
+// ── GOALS ─────────────────────────────────────────────────────────────────────
+function renderGoals(){
+  const p=planConfig;
+  document.getElementById('goalsContent').innerHTML=
+    '<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Emergency fund</div><div class="badge badge-orange" style="margin-left:auto">In progress</div></div>'
+    +'<div class="row"><div class="row-label">Current balance</div><div class="row-val orange">'+(p['emergency_balance']||'$17,500')+'</div></div>'
+    +'<div class="row"><div class="row-label">Target</div><div class="row-val">'+(p['emergency_target']||'$78,000')+'</div></div>'
+    +'<div class="row"><div class="row-label" style="font-weight:600">Est. fully funded</div><div class="row-val green">~Sep 2032 ✓</div></div>'
+    +'<div class="progress-wrap"><div class="progress-labels"><span>Progress</span><span>22%</span></div>'
+    +'<div class="bar-bg2"><div style="width:22%;background:#007aff;height:100%;border-radius:6px"></div></div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff6b35"></div><div class="block-title">Mattie\'s procedures</div><div class="badge badge-orange" style="margin-left:auto">~13 months</div></div>'
+    +'<div class="row"><div class="row-label">Monthly saving</div><div class="row-val">$1,250/mo</div></div>'
+    +'<div class="row"><div class="row-label">Funded by</div><div class="row-val green">~Jul 2027 ✓</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff9500"></div><div class="block-title">Mattie\'s new SUV</div><div class="badge badge-green" style="margin-left:auto">Dec 2028</div></div>'
+    +'<div class="row"><div class="row-label">Purchasing power</div><div class="row-val green">~$65,678</div></div>'
+    +'<div class="note-green" style="margin:0 16px 14px;border-radius:8px">New Suburban/Expedition Max: Fully funded ✓</div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#185fa5"></div><div class="block-title">Eric\'s new car</div><div class="badge badge-blue" style="margin-left:auto">Jan 2029</div></div>'
+    +'<div class="row"><div class="row-label">$1,000/mo · $40k net gap</div><div class="row-val green">~May 2032 ✓</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff3b30"></div><div class="block-title">Kids\' cars ($24k each)</div><div class="badge badge-blue" style="margin-left:auto">Brokerage</div></div>'
+    +'<div class="row"><div class="row-label">Kinsley (Dec 2032)</div><div class="row-val">$152/mo</div></div>'
+    +'<div class="row"><div class="row-label">Kyle (May 2035)</div><div class="row-val">$162/mo</div></div>'
+    +'<div class="row"><div class="row-label">Collins (Jul 2038)</div><div class="row-val">$106/mo</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#ff2d55"></div><div class="block-title">Weddings ($50k each)</div><div class="badge badge-blue" style="margin-left:auto">Brokerage</div></div>'
+    +'<div class="row"><div class="row-label">Kinsley (~2040)</div><div class="row-val">$167/mo</div></div>'
+    +'<div class="row"><div class="row-label">Collins (~2046)</div><div class="row-val">$96/mo</div></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#af52de"></div><div class="block-title">529s at age 18</div><div class="badge badge-purple" style="margin-left:auto">Projected 7%</div></div>'
+    +'<div class="row"><div class="row-label">Kinsley ($325/mo)</div><div class="row-val purple">~$72,300</div></div>'
+    +'<div class="row"><div class="row-label">Kyle ($200/mo)</div><div class="row-val purple">~$72,600</div></div>'
+    +'<div class="row"><div class="row-label">Collins ($225/mo)</div><div class="row-val purple">~$72,000</div></div></div>';
+}
+
+// ── RETIREMENT ────────────────────────────────────────────────────────────────
+function renderRetirement(){
+  const p=planConfig;
+  document.getElementById('retirementContent').innerHTML=
+    '<div class="note"><b>'+(p['balance_retirement_total']||'$449,000')+'</b> current · <b>'+(p['invested_annual']||'$67,702')+'/yr</b> contributions growing 3%/yr · Monte Carlo 1,000 scenarios (mean 9%, std 15%).</div>'
+    +'<div class="note-blue" style="margin-bottom:14px"><b>Same portfolio</b> — Eric turns 65 a year before Mattie so his milestone shows a slightly lower balance.</div>'
+    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
+    +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div><div style="font-size:14px;font-weight:600">Monte Carlo Simulation</div><div style="font-size:12px;color:#8e8e93">1,000 randomized sequences</div></div>'
+    +'<button onclick="runMonteCarlo()" style="background:#007aff;color:#fff;border:none;border-radius:20px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer">&#9654; Run</button>'
+    +'</div>'
+    +'<div id="mcStatus" style="font-size:13px;color:#8e8e93">Tap Run to simulate 1,000 scenarios.</div></div>'
+    +'<div id="mcResults" style="display:none">'
+    +'<div class="divider">Portfolio at milestone ages</div>'
+    +'<div id="mcCards" class="ret-grid"></div>'
+    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
+    +'<div style="font-size:13px;font-weight:600;margin-bottom:4px">Portfolio growth by percentile</div>'
+    +'<canvas id="mcChart" width="340" height="200" style="width:100%;height:200px"></canvas>'
+    +'<div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">'
+    +'<span style="font-size:11px;color:#ff3b30">&#9679; 10th</span>'
+    +'<span style="font-size:11px;color:#ff9500">&#9679; 25th</span>'
+    +'<span style="font-size:11px;color:#007aff;font-weight:600">&#9679; Median</span>'
+    +'<span style="font-size:11px;color:#34c759">&#9679; 75th</span>'
+    +'<span style="font-size:11px;color:#af52de">&#9679; 90th</span>'
+    +'</div></div>'
+    +'<div class="divider">Retirement income · 4.7% withdrawal</div>'
+    +'<div id="mcIncome"></div>'
+    +'<div class="divider">Social Security</div>'
+    +'<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">'
+    +'<div style="font-size:13px;color:#8e8e93;margin-bottom:12px">Verify at <a href="https://ssa.gov/myaccount" style="color:#007aff">ssa.gov/myaccount</a></div>'
+    +'<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">Eric</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="ss-btn" id="eric-65" onclick="setSS(\'eric\',65)">65</button>'
+    +'<button class="ss-btn" id="eric-67" onclick="setSS(\'eric\',67)">67 (FRA)</button>'
+    +'<button class="ss-btn ss-active" id="eric-70" onclick="setSS(\'eric\',70)">70 &#9733;</button>'
+    +'</div></div>'
+    +'<div style="margin-bottom:12px"><div style="font-size:14px;font-weight:600;margin-bottom:8px">Mattie</div>'
+    +'<div style="display:flex;gap:8px">'
+    +'<button class="ss-btn ss-active" id="mattie-65" onclick="setSS(\'mattie\',65)">65 &#9733;</button>'
+    +'<button class="ss-btn" id="mattie-67" onclick="setSS(\'mattie\',67)">67 (FRA)</button>'
+    +'<button class="ss-btn" id="mattie-70" onclick="setSS(\'mattie\',70)">70</button>'
+    +'</div></div>'
+    +'<div id="ssResults"></div></div>'
+    +'<div class="block"><div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Annual investments</div></div>'
+    +'<div class="row"><div class="row-label">401k (both, +3%/yr)</div><div class="row-val">'+(p['contrib_401k']||'$30,000')+'</div></div>'
+    +'<div class="row"><div class="row-label">Employer match</div><div class="row-val green">'+(p['contrib_match']||'$16,302')+'</div></div>'
+    +'<div class="row"><div class="row-label">Backdoor Roth IRAs</div><div class="row-val">'+(p['contrib_roth_ira']||'$15,000')+'</div></div>'
+    +'<div class="row"><div class="row-label">HSA</div><div class="row-val">'+(p['hsa_annual']||'$6,400')+'</div></div>'
+    +'<div class="row"><div class="row-label" style="font-weight:600">Year 1 total</div><div class="row-val blue" style="font-weight:600">'+(p['invested_annual']||'$67,702')+'</div></div>'
+    +'</div></div>';
+  updateSSResults();
+}
+
+// ── MONTE CARLO ───────────────────────────────────────────────────────────────
+function gaussRandom(m,s){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return m+s*Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+function runMonteCarlo(){
+  const btn=document.querySelector('button[onclick="runMonteCarlo()"]');
+  btn.textContent='⏳';btn.disabled=true;
+  document.getElementById('mcStatus').textContent='Simulating...';
+  setTimeout(()=>{
+    const p=planConfig;
+    const START=parseFloat((p['balance_retirement_total']||'449000').replace(/[$,]/g,''));
+    const CONTRIB=parseFloat((p['invested_annual']||'67702').replace(/[$,]/g,''));
+    const SIMS=1000,YEARS=29,CG=.03,MEAN=.09,STD=.15;
+    const finalBals=[];const yd=Array.from({length:YEARS},()=>[]);
+    for(let s=0;s<SIMS;s++){let b=START;for(let y=0;y<YEARS;y++){b=b*(1+gaussRandom(MEAN,STD))+CONTRIB*Math.pow(1+CG,y);yd[y].push(b);}finalBals.push(b);}
+    finalBals.sort((a,b)=>a-b);
+    const pct=(a,p)=>a[Math.floor(a.length*p)];
+    const fm=n=>'$'+(n/1e6).toFixed(2)+'M';
+    const fi=n=>'$'+Math.round(n*.047/12).toLocaleString()+'/mo';
+    const ms=[{l:'Eric 60·Mattie 59',y:23},{l:'Eric 62·Mattie 61',y:25},{l:'Eric 65·Mattie 64',y:28},{l:'Mattie 60·Eric 61',y:24},{l:'Mattie 62·Eric 63',y:26},{l:'Mattie 65·Eric 66',y:29}];
+    const meds=ms.map(m=>{const a=[...yd[m.y-1]].sort((a,b)=>a-b);return pct(a,.5);});
+    document.getElementById('mcCards').innerHTML=ms.map((m,i)=>'<div class="ret-card"><div class="ret-age">'+m.l+'</div><div class="ret-val">'+fm(meds[i])+'</div></div>').join('');
+    const med65=meds[2];
+    const p10=pct([...yd[YEARS-1]].sort((a,b)=>a-b),.1);
+    const p90=pct([...yd[YEARS-1]].sort((a,b)=>a-b),.9);
+    document.getElementById('mcIncome').innerHTML='<span id="mcPM" data-m="'+Math.round(med65*.047/12)+'" style="display:none"></span>'
+      +'<div class="block"><div class="block-header"><div class="accent" style="background:#34c759"></div><div class="block-title">4.7% withdrawal · Eric 65</div><div class="badge badge-green" style="margin-left:auto">Median</div></div>'
+      +'<div class="row"><div class="row-label">Portfolio</div><div class="row-val blue">'+fm(med65)+'</div></div>'
+      +'<div class="row"><div class="row-label">Monthly income</div><div class="row-val green" style="font-size:17px;font-weight:700">'+fi(med65)+'</div></div>'
+      +'<div class="row"><div class="row-label">10th %ile</div><div class="row-val orange">'+fi(p10)+'</div></div>'
+      +'<div class="row"><div class="row-label">90th %ile</div><div class="row-val purple">'+fi(p90)+'</div></div>'
+      +'<div class="row"><div class="row-label">Expenses inflated 28yr@3%</div><div class="row-val">~$29,300/mo</div></div></div>';
+    drawMCChart(yd,YEARS);
+    document.getElementById('mcStatus').innerHTML='<span style="color:#34c759;font-weight:600">✓</span> Median: <b>'+fm(pct(finalBals,.5))+'</b>';
+    document.getElementById('mcResults').style.display='block';
+    btn.textContent='↺ Re-run';btn.disabled=false;
+    updateSSResults();
+  },50);
+}
+function drawMCChart(yd,years){
+  const c=document.getElementById('mcChart');if(!c)return;
+  const ctx=c.getContext('2d'),W=c.offsetWidth||340,H=200;
+  c.width=W*devicePixelRatio;c.height=H*devicePixelRatio;c.style.width=W+'px';c.style.height=H+'px';ctx.scale(devicePixelRatio,devicePixelRatio);
+  const pct=(a,p)=>a[Math.floor(a.length*p)];
+  const s=yd.map(y=>[...y].sort((a,b)=>a-b));
+  const p10=[],p25=[],p50=[],p75=[],p90=[];
+  s.forEach(a=>{p10.push(pct(a,.1));p25.push(pct(a,.25));p50.push(pct(a,.5));p75.push(pct(a,.75));p90.push(pct(a,.9));});
+  const mx=Math.max(...p90),pad={l:40,r:8,t:8,b:24},cw=W-pad.l-pad.r,ch=H-pad.t-pad.b;
+  const x=i=>pad.l+(i/(years-1))*cw,y=v=>pad.t+ch-(v/mx)*ch;
+  ctx.clearRect(0,0,W,H);
+  ctx.strokeStyle='#f0f0f0';ctx.lineWidth=1;
+  [.25,.5,.75,1].forEach(f=>{const yy=pad.t+ch*(1-f);ctx.beginPath();ctx.moveTo(pad.l,yy);ctx.lineTo(W-pad.r,yy);ctx.stroke();ctx.fillStyle='#8e8e93';ctx.font='9px -apple-system';ctx.textAlign='right';ctx.fillText('$'+(mx*f/1e6).toFixed(1)+'M',pad.l-3,yy+3);});
+  ctx.fillStyle='#8e8e93';ctx.font='9px -apple-system';ctx.textAlign='center';
+  [0,7,14,21,27].forEach(i=>ctx.fillText(2026+i+1,x(i),H-6));
+  ctx.beginPath();ctx.moveTo(x(0),y(p25[0]));for(let i=1;i<years;i++)ctx.lineTo(x(i),y(p25[i]));for(let i=years-1;i>=0;i--)ctx.lineTo(x(i),y(p75[i]));ctx.closePath();ctx.fillStyle='rgba(0,122,255,.08)';ctx.fill();
+  [{d:p10,c:'#ff3b30'},{d:p25,c:'#ff9500'},{d:p50,c:'#007aff',w:2.5},{d:p75,c:'#34c759'},{d:p90,c:'#af52de'}].forEach(({d,c,w=1.5})=>{ctx.beginPath();ctx.strokeStyle=c;ctx.lineWidth=w;d.forEach((v,i)=>i===0?ctx.moveTo(x(i),y(v)):ctx.lineTo(x(i),y(v)));ctx.stroke();});
+}
+
+// ── SOCIAL SECURITY ───────────────────────────────────────────────────────────
+function setSS(p,a){
+  SS[p].age=a;
+  [65,67,70].forEach(x=>{const b=document.getElementById(p+'-'+x);if(b)b.className='ss-btn'+(x===a?' ss-active':'');});
+  updateSSResults();
+}
+function updateSSResults(){
+  const ericToday=SS.eric.today[SS.eric.age];
+  const mattieToday=SS.mattie.today[SS.mattie.age];
+  const ericFuture=SS.eric.future[SS.eric.age];
+  const mattieFuture=SS.mattie.future[SS.mattie.age];
+  const ericYear=SS.eric.claimYear[SS.eric.age];
+  const mattieYear=SS.mattie.claimYear[SS.mattie.age];
+  const combinedFuture=ericFuture+mattieFuture;
+  const f=n=>'$'+n.toLocaleString();
+  const hasRun=document.getElementById('mcIncome')&&document.getElementById('mcIncome').innerHTML.length>10;
+  const note=SS.eric.age===70
+    ?'<div style="font-size:12px;color:#1a7f37;margin-top:8px">&#9733; Waiting until 70 maximizes Eric\'s benefit + survivor protection</div>'
+    :SS.eric.age===65?'<div style="font-size:12px;color:#ff9500;margin-top:8px">&#9888; Claiming at 65 = $1,551/mo less than age 70 in today\'s dollars</div>':'';
+  const el=document.getElementById('ssResults');if(!el)return;
+  el.innerHTML='<div style="border-top:1px solid #f2f2f7;padding-top:10px">'
+    +'<div style="font-size:12px;color:#8e8e93;margin-bottom:8px">Future dollars · 2.5%/yr COLA to claim year</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
+    +'<div><div style="color:#6e6e73">Eric at '+SS.eric.age+' ('+ericYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(ericToday)+'/mo</div></div>'
+    +'<span style="font-weight:600">'+f(ericFuture)+'/mo</span></div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">'
+    +'<div><div style="color:#6e6e73">Mattie at '+SS.mattie.age+' ('+mattieYear+')</div><div style="font-size:11px;color:#8e8e93">Today: '+f(mattieToday)+'/mo</div></div>'
+    +'<span style="font-weight:600">'+f(mattieFuture)+'/mo</span></div>'
+    +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600;border-bottom:1px solid #f9f9f9">'
+    +'<span>Combined SS (future $)</span><span style="color:#34c759">'+f(combinedFuture)+'/mo</span></div>'
+    +(hasRun
+      ?'<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f9f9f9"><span style="color:#6e6e73">Portfolio (median)</span><span id="ssP">&#8212;</span></div>'
+       +'<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:700"><span>Total (portfolio + SS)</span><span style="color:#34c759" id="ssT">&#8212;</span></div>'
+       +'<div style="font-size:11px;color:#8e8e93;margin-top:4px">SS begins '+Math.min(ericYear,mattieYear)+'&#8211;'+Math.max(ericYear,mattieYear)+', after the 2054 portfolio milestone</div>'
+      :'<div style="font-size:12px;color:#8e8e93;margin-top:6px">Run Monte Carlo above to see combined total.</div>')
+    +note
+    +'<div style="font-size:11px;color:#8e8e93;margin-top:6px">Verify actual estimates at ssa.gov/myaccount</div></div>';
+  if(hasRun){
+    const pm=document.getElementById('mcPM');
+    if(pm){
+      const v=parseFloat(pm.dataset.m);
+      const ssP=document.getElementById('ssP');
+      const ssT=document.getElementById('ssT');
+      if(ssP)ssP.textContent='$'+Math.round(v).toLocaleString()+'/mo';
+      if(ssT)ssT.textContent='$'+Math.round(v+combinedFuture).toLocaleString()+'/mo';
+    }
+  }
+}
+
 // ── PLAID AUTH ────────────────────────────────────────────────────────────────
 function loadGIS(){return new Promise(r=>{const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=r;s.onerror=()=>{console.error('GIS failed to load');r();};document.head.appendChild(s);});}
 
