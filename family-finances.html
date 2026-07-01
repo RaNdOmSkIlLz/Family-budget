@@ -346,7 +346,7 @@ const MERCHANT_RULES = [
   {pattern:/lawn|mow|landscap/i,                                                                                 cat:'Lawn care'},
   {pattern:/home depot|lowes|ace hardware/i,                                                                     cat:'Home expenses'},
   {pattern:/daycare|kindercare|learning tree|bright horizons/i,                                                  cat:'Daycare'},
-  {pattern:/shell|exxon|chevron|bp |texaco|murphy|racetrac|valero|quiktrip|qt |7-eleven/i,                       cat:'Gas/fuel'},
+  {pattern:/shell|exxon|chevron|bp |texaco|murphy|racetrac|valero|quiktrip|qt |7-eleven| gas$| gas #| fuel$/i,       cat:'Gas/fuel'},
   {pattern:/netflix|hulu|disney|spotify|apple.*subscription|amazon prime|youtube|hbo|paramount/i,               cat:'Streaming'},
   {pattern:/la fitness|planet fitness|lifetime|equinox|anytime fitness|orangetheory|crunch|ymca/i,              cat:'Gym'},
   {pattern:/toll|txdot|ntta|ez tag|pikepass/i,                                                                   cat:'Toll roads'},
@@ -1311,10 +1311,11 @@ async function syncPlaidTransactions() {
       .map(t => ({
         id:            t.transaction_id,
         merchant:      t.merchant_name || t.name,
+        rawName:       t.name,                    // raw Chase description e.g. "HEB #577 SUGAR LAND TX"
         amount:        t.amount,
         date:          t.date,
         plaidCategory: t.personal_finance_category?.primary || t.category?.[0] || '',
-        suggestedCat:  guessCategoryFromMerchant(t.merchant_name || t.name),
+        suggestedCat:  guessCategoryFromMerchant(t.name) || guessCategoryFromMerchant(t.merchant_name),
         splits:        null,
       }));
 
@@ -1443,17 +1444,21 @@ function renderPendingQueue() {
     const splitTotal = txn.splits ? txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0) : 0;
     const splitBalanced = txn.splits && Math.abs(splitTotal - txn.amount) < 0.01;
 
-    // Everything on one line: [date] [merchant truncated] [$amt] [dropdown] [⇄][✓][✕]
+    // Everything left-aligned: [date] [merchant] [$amt] [dropdown] [⇄][✓][✕] — dead space on right
     // If user actively changes the dropdown away from the suggestion → auto-confirm
     // If suggestion was already selected → still requires ✓ click
+    const showRaw = txn.rawName && txn.rawName !== txn.merchant;
     const singleRow = !txn.splits ? `
-      <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-bottom:1px solid #f9f9f9">
-        <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
-        <span style="font-size:13px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>
-        <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
+      <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-bottom:1px solid #f9f9f9;justify-content:flex-start">
+        <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0;min-width:36px">${dateDisplay}</span>
+        <div style="flex-shrink:0;max-width:240px">
+          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+          ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
+        </div>
+        <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">\$${txn.amount.toFixed(2)}</span>
         <select id="pending_cat_${i}"
           onchange="onPendingCatChange(${i}, this)"
-          style="width:150px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:7px;padding:3px 5px;font-size:12px;background:#fff">
+          style="width:160px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:7px;padding:3px 5px;font-size:12px;background:#fff">
           <option value="">— Category —</option>${opts}
         </select>
         <button onclick="togglePendingSplit(${i})" title="Split"
@@ -1470,7 +1475,10 @@ function renderPendingQueue() {
       <div style="padding:5px 10px;border-bottom:1px solid #f9f9f9">
         <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
           <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
-          <span style="font-size:13px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>
+          <div style="flex-shrink:0;max-width:240px">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+            ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
+          </div>
           <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
         </div>
         ${txn.splits.map((sp, si) => {
@@ -1507,10 +1515,10 @@ function renderPendingQueue() {
     return singleRow + splitMode;
   }).join('');
 
-  return `<div style="background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden">
-    <div style="padding:10px 12px;border-bottom:1px solid #f2f2f7;display:flex;align-items:center;justify-content:space-between">
+  return `<div style="background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden;display:inline-block;min-width:500px;max-width:100%">
+    <div style="padding:8px 10px;border-bottom:1px solid #f2f2f7;display:flex;align-items:center;gap:12px">
       <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#3a3a3c">Review Transactions</div>
-      <div style="font-size:11px;color:#8e8e93">${pendingTxns.length} to categorize · ⇄ = split</div>
+      <div style="font-size:11px;color:#8e8e93">${pendingTxns.length} to categorize &nbsp;·&nbsp; ⇄ = split</div>
     </div>
     ${rows}
   </div>`;
