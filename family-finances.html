@@ -371,7 +371,7 @@ let trackerIdx = 0;
 let monthlyIdx = 0;
 let expandedCats = new Set();
 let collapsedSections = new Set();
-let snapshotCollapsed = {retirement:false, roth:false, '401k':false, brokerage:false, hsa:false, '529':false, kinsley529:false, kyle529:false, collins529:false};
+let snapshotCollapsed = {retirement:true, roth:true, '401k':true, brokerage:true, hsa:true, '529':true, kinsley529:true, kyle529:true, collins529:true};
 let modalCtx = null;
 let syncTimer = null;
 let plaidLoaded = false;
@@ -708,6 +708,17 @@ function toggleCat(cat) {
   renderTracker(trackerIdx);
 }
 
+function markAllComplete(idx, secName) {
+  budgetPlan.forEach(cat => {
+    if (cat.Section !== secName) return;
+    const budget = getBudget(idx, cat.Category);
+    if (!budget || budget <= 0) return;
+    if (getState(idx, cat.Category).isSpent) return; // already done
+    toggleSpent(idx, cat.Category, budget);
+  });
+  renderTracker(idx);
+}
+
 function markSectionSpent(idx, secName, event) {
   event.stopPropagation();
   budgetPlan.forEach(cat => {
@@ -777,21 +788,22 @@ function renderTracker(idx) {
     const secAllSavings = secNonZero.length > 0 && secNonZero.every(c => c.isSavings);
 
     const secHdrMeta = secCollapsed
-      ? `<span style="color:#8e8e93;font-size:12px;font-variant-numeric:tabular-nums">${fmt(secActual)} / ${fmt(secBudget)}</span>`
+      ? `<span style="color:rgba(255,255,255,0.8);font-size:12px;font-variant-numeric:tabular-nums">${fmt(secActual)} / ${fmt(secBudget)}</span>`
       : [
-          secAllDone ? '<span style="color:#34c759;font-weight:600;font-size:13px">✓</span>' : '',
-          secVar !== null ? `<span class="${secVar > 0.005 ? 'red' : secVar < -0.005 ? 'green' : 'orange'}" style="font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>` : '',
-          `<span style="font-size:12px;color:#8e8e93">${fmt(secBudget)}</span>`,
-          secAllSavings && !secAllDone
-            ? `<button class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;padding:3px 8px;font-size:11px" onclick="event.stopPropagation();markSectionSpent(${idx},'${esc(secName)}',event)">Mark All Saved</button>`
-            : ''
+          secAllDone ? '<span style="color:#fff;font-weight:600;font-size:13px">✓</span>' : '',
+          secVar !== null ? `<span style="color:${secVar > 0.005 ? '#ffcccc' : secVar < -0.005 ? '#ccffcc' : 'rgba(255,255,255,0.7)'};font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>` : '',
+          `<span style="font-size:12px;color:rgba(255,255,255,0.8)">${fmt(secBudget)}</span>`,
         ].join('');
 
     html += `<div class="section">`;
-    html += `<div class="sec-hdr" style="cursor:pointer" onclick="toggleSection('${esc(secName)}')">
-      <div class="sec-accent" style="background:${col}"></div>
-      <div class="sec-title">${secName}</div>
-      <div class="sec-meta">${secHdrMeta}<span style="color:#8e8e93;font-size:14px;margin-left:6px">${secCollapsed ? '›' : '⌄'}</span></div>
+    html += `<div class="sec-hdr" style="cursor:pointer;background:${col};border-radius:14px 14px 0 0" onclick="toggleSection('${esc(secName)}')">
+      <div class="sec-title" style="color:#fff;font-size:13px">${secName}</div>
+      <div class="sec-meta">
+        ${secHdrMeta}
+        <button class="btn-xs" style="background:rgba(255,255,255,0.25);color:#fff;padding:3px 9px;font-size:11px;margin-left:6px"
+          onclick="event.stopPropagation();markAllComplete(${idx},'${esc(secName)}')">✓ All</button>
+        <span style="color:rgba(255,255,255,0.8);font-size:14px;margin-left:6px">${secCollapsed ? '›' : '⌄'}</span>
+      </div>
     </div>`;
     if (!secCollapsed) items.forEach(cat => { html += renderCatRow(idx, cat); });
     html += `</div>`;
@@ -826,7 +838,7 @@ function renderCatRow(idx, cat) {
 
   const catHeader = `<div class="cat-header" onclick="toggleCat('${esc(cat.Category)}')">
     <span class="cat-chevron ${isExpanded ? 'open' : ''}">▼</span>
-    <span class="cat-name">${cat.Category}</span>
+    <span class="cat-name" style="font-weight:700;color:#1c1c1e">${cat.Category}</span>
     <div class="cat-badges">${badges}${txnCountBadge}</div>
     <div class="cat-right">
       <div style="display:flex;align-items:center;gap:3px">
@@ -1335,12 +1347,13 @@ function buildProjection() {
     const rem = inc - exp - sav;
     tI += inc; tE += exp; tS += sav; tR += rem;
     const rn = RAISE[idx];
+    const remColor = rem < 0 ? '#ff3b30' : '#34c759';
     return `<div class="proj-row${rn ? ' raise' : ''}">
       <div class="proj-month"><div>${mo.label}</div>${rn ? `<div style="font-size:9px;color:#1a7f37;font-weight:600">${rn}</div>` : ''}</div>
       <div class="proj-income" style="color:#007aff">${fmt(inc)}</div>
       <div class="proj-exp">${fmt(exp)}</div>
       <div class="proj-sav" style="color:#af52de">${fmt(sav)}</div>
-      <div class="proj-rem" style="color:#34c759">${fmt(rem)}</div>
+      <div class="proj-rem" style="color:${remColor}">${rem < 0 ? '-' : ''}${fmt(Math.abs(rem))}</div>
     </div>`;
   }).join('');
 
@@ -1349,7 +1362,7 @@ function buildProjection() {
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total income</span><span style="color:#007aff;font-weight:500">${fmt(tI)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total expenses</span><span style="font-weight:500">${fmt(tE)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total savings</span><span style="color:#af52de;font-weight:500">${fmt(tS)}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600"><span>Total remaining</span><span style="color:#34c759">${fmt(tR)}</span></div>`;
+    <div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600"><span>Total remaining</span><span style="color:${tR < 0 ? '#ff3b30' : '#34c759'}">${tR < 0 ? '-' : ''}${fmt(Math.abs(tR))}</span></div>`;
 }
 // ── PLAID TRANSACTION SYNC ────────────────────────────────────────────────────
 async function syncPlaidTransactions() {
