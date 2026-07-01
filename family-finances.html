@@ -1329,6 +1329,20 @@ async function syncPlaidTransactions() {
   }
 }
 
+function onPendingCatChange(idx, selectEl) {
+  const txn = pendingTxns[idx];
+  if (!txn) return;
+  const newCat = selectEl.value;
+  if (!newCat) return;
+  // If the user changed to something different from the suggestion, auto-confirm
+  // If it matched the suggestion already, they actively picked it — also auto-confirm
+  // Either way: any deliberate change = save immediately
+  if (newCat !== txn.suggestedCat) {
+    confirmPendingTxn(idx);
+  }
+  // If they picked the same as suggestion, leave ✓ button for them to click
+}
+
 function confirmPendingTxn(idx) {
   const txn = pendingTxns[idx];
   if (!txn) return;
@@ -1425,66 +1439,72 @@ function renderPendingQueue() {
       `<option value="${c.Category}" ${c.Category === txn.suggestedCat ? 'selected' : ''}>${c.Category}</option>`
     ).join('');
 
-    const dateStr = txn.date; // YYYY-MM-DD
     const dateDisplay = new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
-
     const splitTotal = txn.splits ? txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0) : 0;
     const splitBalanced = txn.splits && Math.abs(splitTotal - txn.amount) < 0.01;
 
+    // Everything on one line: [date] [merchant truncated] [$amt] [dropdown] [⇄][✓][✕]
+    // If user actively changes the dropdown away from the suggestion → auto-confirm
+    // If suggestion was already selected → still requires ✓ click
     const singleRow = !txn.splits ? `
-      <div style="display:flex;gap:6px;align-items:center;margin-top:6px">
-        <select id="pending_cat_${i}" style="flex:1;min-width:0;border:1.5px solid #d1d1d6;border-radius:8px;padding:5px 8px;font-size:12px;background:#fff">
-          <option value="">— Category —</option>
-          ${opts}
+      <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-bottom:1px solid #f9f9f9">
+        <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
+        <span style="font-size:13px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>
+        <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
+        <select id="pending_cat_${i}"
+          onchange="onPendingCatChange(${i}, this)"
+          style="width:150px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:7px;padding:3px 5px;font-size:12px;background:#fff">
+          <option value="">— Category —</option>${opts}
         </select>
+        <button onclick="togglePendingSplit(${i})" title="Split"
+          style="background:#f2f2f7;color:#3a3a3c;border:none;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">⇄</button>
+        <button onclick="confirmPendingTxn(${i})"
+          style="background:#34c759;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
+        <button onclick="skipPendingTxn(${i})"
+          style="background:#f2f2f7;color:#8e8e93;border:none;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
       </div>
-      ${txn.suggestedCat ? `<div style="font-size:10px;color:#007aff;margin-top:3px">&#9654; ${txn.suggestedCat}</div>` : ''}
     ` : '';
 
-    const splitRows = txn.splits ? `
-      <div style="margin-top:6px">
+    // Split mode — more compact version
+    const splitMode = txn.splits ? `
+      <div style="padding:5px 10px;border-bottom:1px solid #f9f9f9">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
+          <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
+          <span style="font-size:13px;font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>
+          <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
+        </div>
         ${txn.splits.map((sp, si) => {
           const spOpts = budgetPlan.map(c =>
             `<option value="${c.Category}" ${c.Category === sp.cat ? 'selected' : ''}>${c.Category}</option>`
           ).join('');
-          return `<div style="display:flex;gap:4px;align-items:center;margin-bottom:4px">
+          return `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding-left:8px">
             <select onchange="updatePendingSplit(${i},${si},'cat',this.value)"
-              style="flex:1;min-width:0;border:1.5px solid #d1d1d6;border-radius:6px;padding:4px 6px;font-size:11px;background:#fff">
-              <option value="">— Category —</option>
-              ${spOpts}
+              style="flex:1;min-width:0;border:1.5px solid #d1d1d6;border-radius:6px;padding:3px 5px;font-size:11px;background:#fff">
+              <option value="">— Category —</option>${spOpts}
             </select>
             <input type="number" value="${sp.amt}" placeholder="0.00" step="0.01" min="0"
               oninput="updatePendingSplit(${i},${si},'amt',this.value)"
-              style="width:64px;border:1.5px solid #d1d1d6;border-radius:6px;padding:4px 6px;font-size:11px;text-align:right">
-            ${txn.splits.length > 2 ? `<button onclick="removePendingSplitRow(${i},${si})" style="background:none;border:none;color:#ff3b30;font-size:14px;cursor:pointer;padding:0 2px;flex-shrink:0">&#xD7;</button>` : '<div style="width:18px"></div>'}
+              style="width:60px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:6px;padding:3px 5px;font-size:11px;text-align:right">
+            ${txn.splits.length > 2 ? `<button onclick="removePendingSplitRow(${i},${si})" style="background:none;border:none;color:#ff3b30;font-size:13px;cursor:pointer;padding:0 2px;flex-shrink:0">&#xD7;</button>` : ''}
           </div>`;
         }).join('')}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
-          <button onclick="addPendingSplitRow(${i})" style="background:none;border:none;color:#007aff;font-size:11px;cursor:pointer;padding:0">+ Add row</button>
-          <span id="split_rem_${i}" style="font-size:11px;font-weight:600;color:${splitBalanced ? '#34c759' : '#ff9500'}">${splitBalanced ? '✓ Balanced' : `Remaining: $${(txn.amount - splitTotal).toFixed(2)}`}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-left:8px">
+          <div style="display:flex;gap:8px">
+            <button onclick="addPendingSplitRow(${i})" style="background:none;border:none;color:#007aff;font-size:11px;cursor:pointer;padding:0">+ row</button>
+            <button onclick="togglePendingSplit(${i})" style="background:none;border:none;color:#8e8e93;font-size:11px;cursor:pointer;padding:0">cancel</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span id="split_rem_${i}" style="font-size:11px;font-weight:600;color:${splitBalanced ? '#34c759' : '#ff9500'}">${splitBalanced ? '✓ Balanced' : `Rem: $${(txn.amount - splitTotal).toFixed(2)}`}</span>
+            <button onclick="confirmPendingTxn(${i})"
+              style="background:#34c759;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">✓ Save</button>
+            <button onclick="skipPendingTxn(${i})"
+              style="background:#f2f2f7;color:#8e8e93;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">✕</button>
+          </div>
         </div>
       </div>
     ` : '';
 
-    return `<div style="padding:8px 12px;border-bottom:1px solid #f2f2f7">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
-          <div style="font-size:10px;color:#8e8e93">${dateDisplay}${txn.plaidCategory ? ' · ' + txn.plaidCategory : ''}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;margin-left:8px">
-          <span style="font-size:13px;font-weight:600;color:#ff3b30">$${txn.amount.toFixed(2)}</span>
-          <button onclick="togglePendingSplit(${i})" title="${txn.splits ? 'Remove split' : 'Split transaction'}"
-            style="background:${txn.splits ? '#ff9500' : '#f2f2f7'};color:${txn.splits ? '#fff' : '#3a3a3c'};border:none;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:600;cursor:pointer">⇄</button>
-          <button onclick="confirmPendingTxn(${i})"
-            style="background:#34c759;color:#fff;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:600;cursor:pointer">✓</button>
-          <button onclick="skipPendingTxn(${i})"
-            style="background:#f2f2f7;color:#8e8e93;border:none;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:600;cursor:pointer">✕</button>
-        </div>
-      </div>
-      ${singleRow}
-      ${splitRows}
-    </div>`;
+    return singleRow + splitMode;
   }).join('');
 
   return `<div style="background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden">
