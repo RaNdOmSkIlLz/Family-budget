@@ -2497,7 +2497,21 @@ async function loadPlanConfig() {
     return loadPlanConfig();
   }
   planConfig = {};
-  rows.slice(1).forEach(r => { if (r[0]) planConfig[r[0]] = r[1] || ''; });
+  rows.slice(1).forEach(r => {
+    if (!r[0]) return;
+    const raw = r[1] || '';
+    // Normalize: if it's a plain number from the sheet, add $ and comma formatting
+    const num = parseFloat(String(raw).replace(/[$,]/g, ''));
+    if (!isNaN(num) && String(raw).trim() !== '' && !String(raw).includes('-')) {
+      // For keys that are ages or counts, keep as plain number
+      const plainKeys = ['eric_age', 'mattie_age'];
+      planConfig[r[0]] = plainKeys.includes(r[0]) ? String(Math.round(num)) : '$' + num.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2});
+    } else {
+      planConfig[r[0]] = raw;
+    }
+  });
+  console.log('[Plan] invested_annual =', planConfig['invested_annual']);
+  console.log('[Plan] contrib_401k =', planConfig['contrib_401k']);
 }
 
 // ── LOAD TRACKER DATA ─────────────────────────────────────────────────────────
