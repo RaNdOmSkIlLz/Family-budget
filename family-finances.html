@@ -375,6 +375,9 @@ let snapshotCollapsed = {retirement:false, roth:false, '401k':false, brokerage:f
 let modalCtx = null;
 let syncTimer = null;
 let plaidLoaded = false;
+let windfallLog = [];      // [{year, date, source, amount, notes}]
+let windfallYears = [];    // [2026, 2027, ...]
+let windfallYearIdx = 0;   // currently selected year tab
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const fmt = n => '$' + (Math.abs(n) || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtSigned = n => { if (n === null || n === undefined) return ''; if (Math.abs(n) < 0.005) return '✓'; return (n > 0 ? '+' : '') + fmt(n); };
@@ -1191,6 +1194,10 @@ function updateAddRemaining() {
 
 function saveAdd() {
   if (!modalCtx) return;
+
+  // Windfall modal has its own save function
+  if (modalCtx.type === 'windfall') { saveWindfall(); return; }
+
   const desc = document.getElementById('addDesc').value.trim() || 'Transaction';
   const rows = document.querySelectorAll('#addRows .split-row');
   const splits = [];
@@ -1234,6 +1241,7 @@ function saveAdd() {
 
 function closeModal() {
   document.getElementById('modalAdd').classList.remove('open');
+  document.getElementById('addDesc').style.display = '';
   modalCtx = null;
 }
 
@@ -1827,28 +1835,199 @@ function renderSnapshotAccounts(accounts) {
 }
 // ── WINDFALL ──────────────────────────────────────────────────────────────────
 function renderWindfall() {
-  const p = planConfig;
-  const block = (color, title, badge, rows) =>
-    `<div class="block"><div class="block-header"><div class="accent" style="background:${color}"></div><div class="block-title">${title}</div>${badge ? `<div class="badge ${badge[1]}" style="margin-left:auto">${badge[0]}</div>` : ''}</div>${rows}</div>`;
-  const row = (label, val, sub) =>
-    `<div class="row"><div class="row-label">${label}${sub ? `<div class="row-sub">${sub}</div>` : ''}</div><div class="row-val">${val}</div></div>`;
+  const year = windfallYears[windfallYearIdx] || 2026;
 
-  document.getElementById('windfallContent').innerHTML =
-    `<div class="note"><b>${p['windfall_annual'] || '$25,927'}/yr windfall</b> from bonuses and Mattie's extra paychecks.</div>` +
-    block('#007aff', 'Backdoor Roth IRAs', ['Priority #1', 'badge-blue'],
-      row('Eric Roth IRA', p['windfall_roth_eric'] || '$7,500') +
-      row('Mattie Roth IRA', p['windfall_roth_mattie'] || '$7,500')) +
-    block('#34c759', 'Vacation fund', ['Funded', 'badge-green'],
-      row('Annual family vacation', p['windfall_vacation'] || '$5,000')) +
-    block('#ff2d55', 'Christmas fund', ['Funded', 'badge-green'],
-      row('Annual gifts &amp; festivities', p['windfall_christmas'] || '$2,000')) +
-    block('#8e8e93', 'Home projects', null,
-      row('Annual top-up', p['windfall_home'] || '$1,000')) +
-    block('#ff9500', "Mattie's car fund boost", null,
-      row('Toward SUV Dec 2028', p['windfall_car_mattie'] || '$1,463')) +
-    block('#007aff', 'Emergency fund boost', null,
-      row('Annual contribution', p['windfall_emergency'] || '$1,464')) +
-    `<div class="alloc-total"><span>Total allocated</span><span>${p['windfall_annual'] || '$25,927'}</span></div>`;
+  // Get allocations from planConfig (loaded from Windfall sheet tab), sorted by priority
+  const ALLOC_KEYS = [
+    {key:'windfall_christmas',   label:'Christmas fund'},
+    {key:'windfall_roth_eric',   label:'Eric Roth IRA'},
+    {key:'windfall_roth_mattie', label:'Mattie Roth IRA'},
+    {key:'windfall_vacation',    label:'Vacation fund'},
+    {key:'windfall_home',        label:'Home projects'},
+    {key:'windfall_car_mattie',  label:"Mattie's car boost"},
+    {key:'windfall_emergency',   label:'Emergency boost'},
+  ];
+
+  const allocations = ALLOC_KEYS.map(a => ({
+    ...a,
+    amount: parseFloat((planConfig[a.key] || '0').replace(/[$,]/g,'')) || 0,
+  })).filter(a => a.amount > 0);
+
+  const totalAlloc = allocations.reduce((s, a) => s + a.amount, 0);
+
+  // Get inflows for this year from windfallLog
+  const inflows = windfallLog.filter(w => w.year === year);
+  const totalIn  = inflows.reduce((s, w) => s + w.amount, 0);
+
+  // Apply inflows to allocations in priority order
+  let remaining = totalIn;
+  const funded = allocations.map(a => {
+    const f = Math.min(a.amount, Math.max(0, remaining));
+    remaining -= f;
+    return {...a, funded: f, pct: a.amount > 0 ? f / a.amount : 0};
+  });
+
+  // Year tabs
+  const yearTabs = windfallYears.map((y, i) =>
+    `<div class="month-btn ${i === windfallYearIdx ? 'active' : ''}"
+      onclick="selectWindfallYear(${i})" style="cursor:pointer">${y}</div>`
+  ).join('');
+
+  const addYearBtn = `<div class="add-month-btn" onclick="addWindfallYear()" style="cursor:pointer">+ ${(windfallYears[windfallYears.length-1]||2026)+1}</div>`;
+
+  let html = '';
+
+  // Year nav
+  html += `<div style="display:flex;gap:6px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+    ${yearTabs}${addYearBtn}
+  </div>`;
+
+  // Inflows section
+  html += `<div class="divider" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Inflows</span>
+    <button class="btn-xs btn-add" style="font-size:11px;padding:3px 10px" onclick="openAddWindfall(${year})">+ Add</button>
+  </div>`;
+
+  html += '<div class="block">';
+  if (inflows.length) {
+    inflows.forEach((w, wi) => {
+      const dateDisplay = w.date && w.date.length === 10
+        ? new Date(w.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'})
+        : w.date || 'TBD';
+      html += `<div class="row" style="padding:10px 16px">
+        <div>
+          <div class="row-label">${w.source}</div>
+          <div class="row-sub">${dateDisplay}${w.notes ? ' · ' + w.notes : ''}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div class="row-val green">${fmt(w.amount)}</div>
+          <button onclick="deleteWindfall(${wi})" style="background:none;border:none;color:#ff3b30;font-size:14px;cursor:pointer;padding:0">&#xD7;</button>
+        </div>
+      </div>`;
+    });
+    html += `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:#f9f9f9;font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
+      <span>Total received</span><span style="color:#34c759">${fmt(totalIn)}</span>
+    </div>`;
+    if (totalIn < totalAlloc) {
+      const expected = totalAlloc - totalIn;
+      html += `<div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:13px;color:#8e8e93">
+        <span>Remaining to receive</span><span>${fmt(expected)}</span>
+      </div>`;
+    }
+  } else {
+    html += `<div style="padding:16px;font-size:13px;color:#8e8e93;text-align:center">No inflows logged for ${year} yet. Tap + Add to log one.</div>`;
+  }
+  html += '</div>';
+
+  // Allocation plan section
+  html += `<div class="divider" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Allocation plan</span>
+    <span style="font-size:12px;color:#8e8e93">Priority order</span>
+  </div>`;
+
+  html += '<div class="block">';
+  funded.forEach(a => {
+    const barWidth = Math.min(Math.round(a.pct * 100), 100);
+    const barColor = a.pct >= 1 ? '#34c759' : a.pct > 0 ? '#007aff' : '#e5e5ea';
+    const statusLabel = a.pct >= 1
+      ? `<span style="font-size:11px;color:#34c759;font-weight:600">✓ Funded</span>`
+      : a.pct > 0
+      ? `<span style="font-size:11px;color:#007aff">${Math.round(a.pct*100)}% funded</span>`
+      : `<span style="font-size:11px;color:#8e8e93">Unfunded</span>`;
+
+    html += `<div style="padding:10px 16px;border-bottom:1px solid #f2f2f7">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
+        <div>
+          <div style="font-size:14px;font-weight:500">${a.label}</div>
+          ${statusLabel}
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:14px;font-weight:600">${fmt(a.amount)}</div>
+          ${a.funded > 0 && a.funded < a.amount
+            ? `<div style="font-size:11px;color:#8e8e93">${fmt(a.funded)} of ${fmt(a.amount)}</div>`
+            : ''}
+        </div>
+      </div>
+      <div style="background:#e5e5ea;border-radius:4px;height:6px;overflow:hidden">
+        <div style="width:${barWidth}%;background:${barColor};height:100%;border-radius:4px;transition:width .3s"></div>
+      </div>
+    </div>`;
+  });
+
+  html += `<div style="display:flex;justify-content:space-between;padding:12px 16px;background:#f9f9f9;font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
+    <span>Total allocated</span><span>${fmt(totalAlloc)}</span>
+  </div>`;
+
+  if (totalIn > totalAlloc) {
+    html += `<div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:13px;color:#34c759;font-weight:600">
+      <span>Surplus (unallocated)</span><span>${fmt(totalIn - totalAlloc)}</span>
+    </div>`;
+  }
+  html += '</div>';
+
+  document.getElementById('windfallContent').innerHTML = html;
+}
+
+function selectWindfallYear(i) {
+  windfallYearIdx = i;
+  renderWindfall();
+}
+
+function addWindfallYear() {
+  const nextYear = (windfallYears[windfallYears.length - 1] || 2026) + 1;
+  if (!windfallYears.includes(nextYear)) windfallYears.push(nextYear);
+  windfallYearIdx = windfallYears.length - 1;
+  renderWindfall();
+}
+
+// Add windfall modal (reuse the main modal)
+function openAddWindfall(year) {
+  modalCtx = {type: 'windfall', year};
+  document.getElementById('modalAddTitle').textContent = 'Log windfall inflow';
+  document.getElementById('addRows').innerHTML = `
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Source</label>
+    <input type="text" id="wfSource" placeholder="e.g. Eric bonus, Mattie extra check" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Amount</label>
+    <input type="number" id="wfAmount" placeholder="0.00" step="0.01" min="0"
+      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();saveWindfall()}">
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Date</label>
+    <input type="date" id="wfDate" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Notes (optional)</label>
+    <input type="text" id="wfNotes" placeholder="e.g. Annual bonus" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+  `;
+  document.getElementById('addRemaining').style.display = 'none';
+  document.getElementById('addDesc').style.display = 'none';
+  document.getElementById('modalAdd').classList.add('open');
+  setTimeout(() => document.getElementById('wfSource')?.focus(), 100);
+}
+
+function saveWindfall() {
+  if (!modalCtx || modalCtx.type !== 'windfall') return;
+  const source = document.getElementById('wfSource')?.value?.trim();
+  const amount = parseFloat(document.getElementById('wfAmount')?.value);
+  const date   = document.getElementById('wfDate')?.value || '';
+  const notes  = document.getElementById('wfNotes')?.value?.trim() || '';
+  if (!source || !amount) return;
+
+  windfallLog.push({year: modalCtx.year, date, source, amount, notes});
+  windfallLog.sort((a, b) => a.year - b.year || a.date.localeCompare(b.date));
+  scheduleSave();
+  document.getElementById('addDesc').style.display = '';
+  closeModal();
+  renderWindfall();
+}
+
+function deleteWindfall(logIdx) {
+  // Find the actual index in windfallLog for the current year
+  const year = windfallYears[windfallYearIdx];
+  const yearItems = windfallLog.filter(w => w.year === year);
+  const item = yearItems[logIdx];
+  if (!item) return;
+  const globalIdx = windfallLog.indexOf(item);
+  if (globalIdx !== -1) windfallLog.splice(globalIdx, 1);
+  scheduleSave();
+  renderWindfall();
 }
 
 // ── GOALS ─────────────────────────────────────────────────────────────────────
@@ -2384,19 +2563,34 @@ async function loadTrackerData() {
         effectiveDate: r[2] || '2026-06-01'
       });
     });
-  } catch(e) {
-    console.log('Income tab not found, using defaults:', e.message);
-  }
+  } catch(e) { console.log('Income tab not found:', e.message); }
 
-  // Load Windfall tab into planConfig overrides
+  // Load Windfall allocation tab into planConfig
   try {
-    const wfRows = await readSheet(BUDGET_SHEET_ID, 'Windfall!A:C');
+    const wfRows = await readSheet(BUDGET_SHEET_ID, 'Windfall!A:D');
     if (wfRows.length > 1) wfRows.slice(1).forEach(r => {
       if (r[0] && r[2]) planConfig[r[0]] = '$' + parseFloat(r[2]).toLocaleString();
     });
-  } catch(e) {
-    console.log('Windfall tab not found, using defaults:', e.message);
-  }
+  } catch(e) { console.log('Windfall tab not found:', e.message); }
+
+  // Load WindfallLog tab
+  try {
+    const wlRows = await readSheet(BUDGET_SHEET_ID, 'WindfallLog!A:E');
+    windfallLog = [];
+    if (wlRows.length > 1) wlRows.slice(1).forEach(r => {
+      if (r[0] && r[2]) windfallLog.push({
+        year:   parseInt(r[0]) || 2026,
+        date:   r[1] || '',
+        source: r[2] || '',
+        amount: parseFloat(r[3]) || 0,
+        notes:  r[4] || '',
+      });
+    });
+    // Build year list from log
+    const yearSet = new Set(windfallLog.map(w => w.year));
+    yearSet.add(2026); // always include 2026
+    windfallYears = [...yearSet].sort();
+  } catch(e) { console.log('WindfallLog tab not found:', e.message); windfallYears = [2026]; }
 }
 // ── SAVE ──────────────────────────────────────────────────────────────────────
 function scheduleSave() {
@@ -2451,6 +2645,10 @@ async function saveAll() {
     const mmRows = [['Merchant','Category']];
     Object.entries(merchantMap).forEach(([m, c]) => mmRows.push([m, c]));
 
+    // Windfall log
+    const wlRows = [['Year','Date','Source','Amount','Notes']];
+    windfallLog.forEach(w => wlRows.push([w.year, w.date, w.source, w.amount, w.notes]));
+
     await Promise.all([
       clearAndWrite(BUDGET_SHEET_ID, 'CategoryState!A1',   stateRows),
       clearAndWrite(BUDGET_SHEET_ID, 'Transactions!A1',    txnRows),
@@ -2458,6 +2656,7 @@ async function saveAll() {
       clearAndWrite(BUDGET_SHEET_ID, 'TrackerBudgets!A1',  budgetRows),
       clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     extraMonthRows),
       clearAndWrite(BUDGET_SHEET_ID, 'MerchantMap!A1',     mmRows),
+      clearAndWrite(BUDGET_SHEET_ID, 'WindfallLog!A1',     wlRows),
     ]);
 
     setSyncStatus('ok');
@@ -2479,6 +2678,7 @@ async function setupBudgetSheet() {
     await clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     [['Key','Label','YearMonth']]);
     await setupIncomeTab();
     await setupWindfallTab();
+    await setupWindfallLogTab();
   } catch (e) {
     setLoadingError('Sheet setup error: ' + e.message + ' — check tab names exist in your Google Sheet');
     throw e;
@@ -2496,14 +2696,25 @@ async function setupIncomeTab() {
 
 async function setupWindfallTab() {
   await clearAndWrite(BUDGET_SHEET_ID, 'Windfall!A1', [
-    ['Key',                  'Label',                        'Amount', 'Notes'],
-    ['windfall_roth_eric',   'Eric Roth IRA (backdoor)',     7500,     'Annual contribution'],
-    ['windfall_roth_mattie', 'Mattie Roth IRA (backdoor)',   7500,     'Annual contribution'],
-    ['windfall_vacation',    'Annual vacation',              5000,     'Family trip'],
-    ['windfall_christmas',   'Christmas fund',               2000,     'Gifts & festivities'],
-    ['windfall_home',        'Home projects top-up',         1000,     'Annual contribution'],
-    ['windfall_car_mattie',  "Mattie's car fund boost",      1463,     'Toward SUV Dec 2028'],
-    ['windfall_emergency',   'Emergency fund boost',         1464,     'Annual contribution'],
+    ['Key',                  'Label',                        'Amount', 'Priority', 'Notes'],
+    ['windfall_christmas',   'Christmas fund',               2000,     1,          'Gifts & festivities'],
+    ['windfall_roth_eric',   'Eric Roth IRA (backdoor)',     7500,     2,          'Annual contribution'],
+    ['windfall_roth_mattie', 'Mattie Roth IRA (backdoor)',   7500,     3,          'Annual contribution'],
+    ['windfall_vacation',    'Annual vacation',              5000,     4,          'Family trip'],
+    ['windfall_home',        'Home projects top-up',         1000,     5,          'Annual contribution'],
+    ['windfall_car_mattie',  "Mattie's car fund boost",      1463,     6,          'Toward SUV Dec 2028'],
+    ['windfall_emergency',   'Emergency fund boost',         1464,     7,          'Annual contribution'],
+  ]);
+}
+
+async function setupWindfallLogTab() {
+  await clearAndWrite(BUDGET_SHEET_ID, 'WindfallLog!A1', [
+    ['Year', 'Date',       'Source',              'Amount',  'Notes'],
+    [2026,   '2026-10-31', 'Mattie extra check',  2574.19,   '3rd paycheck Oct'],
+    [2026,   '2026-12-28', 'Eric bonus',          9000,      'Annual bonus'],
+    [2026,   '2026-12-31', 'Eric DSA',            7500,      'Deferred stock award'],
+    [2026,   '2027-01-07', 'Well-being subsidy',  1200,      'Annual subsidy — applied to 2026 plan'],
+    [2027,   '2027-04-??', 'Mattie extra check',  2574.19,   'Est. 3rd paycheck Apr — update date when known'],
   ]);
 }
 
