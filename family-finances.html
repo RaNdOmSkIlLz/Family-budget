@@ -399,69 +399,57 @@ function getIncome(idx) {
   const mo = months[idx];
   if (!mo) return {eric:0, mattie:0, total:0};
 
-  // If incomeConfig not loaded yet, fall back to hardcoded defaults
+  // Budgeting approach:
+  // Eric:  biweekly × 26/12 (true monthly average — his extra checks aren't treated as windfall)
+  // Mattie: biweekly × 2   (budgeted as 2 paychecks/month; the 2 extra/yr go to windfall)
+
   if (!incomeConfig.length) {
-    const BASE = 16583.30;
-    const ES = 5678.35 / (5678.35 + 2613.30);
-    const MS = 1 - ES;
-    const eric   = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1)) ? BASE * ES * 1.03 : BASE * ES;
-    const mattie = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6)) ? BASE * MS * 1.035 : BASE * MS;
+    // Fallback defaults — both bimonthly ×2
+    const eric   = 5678.35 * 2;
+    const mattie = 2574.19 * 2;
     return {eric, mattie, total: eric + mattie};
   }
 
-  // Build monthly pay for each person by finding which biweekly rate applies
-  // for each of the ~2 pay periods in this month
-  const monthStart = new Date(mo.year, mo.month - 1, 1);
-  const monthEnd   = new Date(mo.year, mo.month, 0);
+  const monthEnd = new Date(mo.year, mo.month, 0);
 
-  function monthlyForPerson(person) {
-    // Get all rates for this person sorted by effective date descending
+  function rateForPerson(person) {
     const rates = incomeConfig
       .filter(r => r.person.toLowerCase() === person.toLowerCase())
-      .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
+      .sort((a, b) => new Date(a.effectiveDate) - new Date(b.effectiveDate));
     if (!rates.length) return 0;
 
-    // Simulate biweekly paydays in this month
-    // Use a fixed anchor date (first payday on record) and step by 14 days
-    const anchor = new Date(rates[rates.length - 1].effectiveDate);
-    const paydays = [];
-    // Find paydays within this month
-    let d = new Date(anchor);
-    // Step forward to reach this month's range
-    while (d < monthStart) d = new Date(d.getTime() + 14 * 86400000);
-    // Step back in case we overshot
-    while (d > monthStart) d = new Date(d.getTime() - 14 * 86400000);
-    // Now collect all paydays in this month
-    let cur = new Date(d);
-    while (cur <= monthEnd) {
-      if (cur >= monthStart) paydays.push(new Date(cur));
-      cur = new Date(cur.getTime() + 14 * 86400000);
-    }
-    if (!paydays.length) paydays.push(monthStart); // fallback
-
-    // For each payday, find the applicable rate
-    let total = 0;
-    paydays.forEach(pd => {
-      const rate = rates.find(r => new Date(r.effectiveDate) <= pd) || rates[rates.length - 1];
-      total += rate.biweekly;
+    // For months where a new rate takes effect mid-month (e.g. Jun26 for Mattie),
+    // average the rates that are active during this month
+    const monthStart = new Date(mo.year, mo.month - 1, 1);
+    const inMonth = rates.filter(r => {
+      const ed = new Date(r.effectiveDate);
+      return ed >= monthStart && ed <= monthEnd;
     });
 
-    // Normalize to monthly: actual paychecks received / expected paychecks per month
-    // Expected = 26/12 paychecks per month on average
-    // Use actual paydays collected, but scale to 26/12 average for consistent projection
-    const expectedPerMonth = 26 / 12;
-    return total / paydays.length * expectedPerMonth;
+    if (inMonth.length > 1) {
+      // Blended month — average the biweekly amounts
+      return inMonth.reduce((s, r) => s + r.biweekly, 0) / inMonth.length;
+    }
+
+    // Find most recent rate effective on or before this month
+    const applicable = rates.filter(r => new Date(r.effectiveDate) <= monthEnd);
+    if (!applicable.length) return rates[0].biweekly;
+    return applicable[applicable.length - 1].biweekly;
   }
 
-  const eric   = monthlyForPerson('Eric');
-  const mattie = monthlyForPerson('Mattie');
+  const ericBiweekly   = rateForPerson('Eric');
+  const mattieBiweekly = rateForPerson('Mattie');
 
-  // Apply scheduled raises if configured
-  // Eric +3% Jan 2027, Mattie +3.5% Jun 2027
-  const ericRaised   = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1))  ? eric   * 1.03  : eric;
-  const mattieRaised = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6))  ? mattie * 1.035 : mattie;
+  // Both Eric and Mattie budgeted as bimonthly (2 paychecks/month)
+  // Extra paychecks (Eric gets 2 extra/yr, Mattie gets 2 extra/yr) go to windfall
+  let eric   = ericBiweekly * 2;
+  let mattie = mattieBiweekly * 2;
 
-  return {eric: ericRaised, mattie: mattieRaised, total: ericRaised + mattieRaised};
+  // Apply scheduled raises
+  if (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1))  eric   *= 1.03;
+  if (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6))  mattie *= 1.035;
+
+  return {eric, mattie, total: eric + mattie};
 }
 
 function getBudget(idx, cat) {
@@ -1959,11 +1947,11 @@ function renderRetirement() {
     </div>` +
     `<div class="block">
       <div class="block-header"><div class="accent" style="background:#007aff"></div><div class="block-title">Annual investments</div></div>
-      <div class="row"><div class="row-label">401k (both)</div><div class="row-val">${p['contrib_401k'] || '$30,000'}</div></div>
-      <div class="row"><div class="row-label">Employer match</div><div class="row-val green">${p['contrib_match'] || '$16,302'}</div></div>
+      <div class="row"><div class="row-label">401k (both)</div><div class="row-val">${p['contrib_401k'] || '$31,897'}</div></div>
+      <div class="row"><div class="row-label">Employer match</div><div class="row-val green">${p['contrib_match'] || '$17,282'}</div></div>
       <div class="row"><div class="row-label">Backdoor Roth IRAs</div><div class="row-val">${p['contrib_roth_ira'] || '$15,000'}</div></div>
-      <div class="row"><div class="row-label">HSA</div><div class="row-val">${p['hsa_annual'] || '$6,400'}</div></div>
-      <div class="row"><div class="row-label" style="font-weight:600">Year 1 total</div><div class="row-val blue" style="font-weight:600">${p['invested_annual'] || '$67,702'}</div></div>
+      <div class="row"><div class="row-label">HSA</div><div class="row-val">${p['hsa_annual'] || '$6,694'}</div></div>
+      <div class="row"><div class="row-label" style="font-weight:600">Year 1 total</div><div class="row-val blue" style="font-weight:600">${p['invested_annual'] || '$70,874'}</div></div>
     </div>`;
   updateSSResults();
 }
@@ -1981,8 +1969,8 @@ function runMonteCarlo() {
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   setTimeout(() => {
     const p = planConfig;
-    const START  = parseFloat((p['balance_retirement_total'] || '449000').replace(/[$,]/g, ''));
-    const CONTRIB = parseFloat((p['invested_annual'] || '67702').replace(/[$,]/g, ''));
+    const START   = parseFloat((p['balance_retirement_total'] || '449000').replace(/[$,]/g, ''));
+    const CONTRIB = parseFloat((p['invested_annual'] || '70874').replace(/[$,]/g, ''));
     const SIMS = 1000, YEARS = 29, CG = 0.03, MEAN = 0.09, STD = 0.15;
 
     const finalBals = [];
