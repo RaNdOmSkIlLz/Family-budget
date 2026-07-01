@@ -347,7 +347,7 @@ const MERCHANT_RULES = [
   {pattern:/home depot|lowes|ace hardware/i,                                                                     cat:'Home expenses'},
   {pattern:/daycare|kindercare|learning tree|bright horizons/i,                                                  cat:'Daycare'},
   {pattern:/shell|exxon|chevron|bp |texaco|murphy|racetrac|valero|quiktrip|qt |7-eleven| gas$| gas #| fuel$/i,       cat:'Gas/fuel'},
-  {pattern:/netflix|hulu|disney|spotify|apple.*subscription|amazon prime|youtube|hbo|paramount/i,               cat:'Streaming'},
+  {pattern:/netflix|hulu|disney\+|spotify|youtube premium|hbo|paramount\+|apple tv\+|peacock/i,                  cat:'Streaming'},
   {pattern:/la fitness|planet fitness|lifetime|equinox|anytime fitness|orangetheory|crunch|ymca/i,              cat:'Gym'},
   {pattern:/toll|txdot|ntta|ez tag|pikepass/i,                                                                   cat:'Toll roads'},
   {pattern:/hair|salon|barber|great clips|sport clips/i,                                                         cat:'Haircuts'},
@@ -476,13 +476,27 @@ function detect529Child(name) {
 function guessCategoryFromMerchant(name) {
   if (!name) return null;
   const lower = name.toLowerCase();
+
+  // Check learned map first (exact match)
   if (merchantMap[lower]) return merchantMap[lower];
+
+  // Check partial matches in learned map
   for (const [key, cat] of Object.entries(merchantMap)) {
     if (lower.includes(key) || key.includes(lower)) return cat;
   }
+
+  // Amazon: only suggest streaming if raw description explicitly says Prime Video/Music
+  // Otherwise leave blank — Amazon is too varied to auto-categorize
+  if (lower.includes('amazon') || lower.includes('amzn')) {
+    if (/prime video|prime music|audible|kindle/i.test(name)) return 'Streaming';
+    return null; // Let user pick — could be groceries, home, kids, personal, etc.
+  }
+
+  // Check built-in rules
   for (const rule of MERCHANT_RULES) {
     if (rule.pattern.test(name)) return rule.cat;
   }
+
   return null;
 }
 
