@@ -675,7 +675,7 @@ function renderTracker(idx) {
   // Sync button
   const syncRow = document.getElementById('syncTxnRow');
   if (syncRow) syncRow.innerHTML =
-    '<button id="syncTxnBtn" class="btn-xs btn-add" style="font-size:12px;padding:6px 14px" onclick="syncPlaidTransactions()">&#8635; Sync Chase (30 days)</button>' +
+    `<button id="syncTxnBtn" class="btn-xs btn-add" style="font-size:12px;padding:6px 14px" onclick="syncPlaidTransactions()">&#8635; Sync Chase (${months[idx].label})</button>` +
     '<span id="syncTxnStatus" style="font-size:12px;color:#8e8e93;margin-left:8px"></span>';
 
   // Pending queue
@@ -1288,19 +1288,24 @@ async function syncPlaidTransactions() {
   if (status) status.textContent = 'Fetching from Chase...';
 
   try {
-    const r = await fetch(PLAID_SERVER + '/api/get-transactions');
+    // Use the selected tracker month's date range
+    const mo = months[trackerIdx];
+    const startDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-01`;
+    const lastDay = new Date(mo.year, mo.month, 0).getDate();
+    const endDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+
+    const r = await fetch(`${PLAID_SERVER}/api/get-transactions?start=${startDate}&end=${endDate}`);
     const {transactions, error} = await r.json();
     if (error) throw new Error(JSON.stringify(error));
 
-    // Strict filter: only transactions within the currently selected tracker month
-    const mo = months[trackerIdx];
-    const monthStart = new Date(mo.year, mo.month - 1, 1);           // e.g. Jun 1
-    const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);   // e.g. Jun 30 23:59:59
+    // Strict client-side filter: only the selected month (guards against TZ edge cases)
+    const monthStart = new Date(mo.year, mo.month - 1, 1);
+    const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
 
     pendingTxns = (transactions || [])
       .filter(t => {
-        const d = new Date(t.date + 'T12:00:00'); // noon to avoid TZ edge cases
-        return d >= monthStart && d <= monthEnd && t.amount > 0; // positive = debit in Plaid
+        const d = new Date(t.date + 'T12:00:00');
+        return d >= monthStart && d <= monthEnd && t.amount > 0;
       })
       .filter(t => !trackerData.confirmedPlaidIds.has(t.transaction_id))
       .map(t => ({
@@ -1310,7 +1315,7 @@ async function syncPlaidTransactions() {
         date:          t.date,
         plaidCategory: t.personal_finance_category?.primary || t.category?.[0] || '',
         suggestedCat:  guessCategoryFromMerchant(t.merchant_name || t.name),
-        splits:        null, // null = no split yet
+        splits:        null,
       }));
 
     if (status) status.textContent = pendingTxns.length
