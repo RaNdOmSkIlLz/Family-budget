@@ -2492,6 +2492,8 @@ async function loadBudgetConfig() {
 // ── LOAD PLAN CONFIG ──────────────────────────────────────────────────────────
 async function loadPlanConfig() {
   const rows = await readSheet(PLAN_SHEET_ID, 'Plan!A:B');
+  console.log('[Plan] raw rows count:', rows.length);
+  console.log('[Plan] first 3 rows:', JSON.stringify(rows.slice(0,3)));
   if (rows.length < 2) {
     await setupPlanSheet();
     return loadPlanConfig();
@@ -2500,10 +2502,8 @@ async function loadPlanConfig() {
   rows.slice(1).forEach(r => {
     if (!r[0]) return;
     const raw = r[1] || '';
-    // Normalize: if it's a plain number from the sheet, add $ and comma formatting
     const num = parseFloat(String(raw).replace(/[$,]/g, ''));
     if (!isNaN(num) && String(raw).trim() !== '' && !String(raw).includes('-')) {
-      // For keys that are ages or counts, keep as plain number
       const plainKeys = ['eric_age', 'mattie_age'];
       planConfig[r[0]] = plainKeys.includes(r[0]) ? String(Math.round(num)) : '$' + num.toLocaleString('en-US', {minimumFractionDigits:0, maximumFractionDigits:2});
     } else {
