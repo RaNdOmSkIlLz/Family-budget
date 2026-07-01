@@ -392,15 +392,76 @@ function nextMonth(last) {
   return { key: n[m] + String(y).slice(2), label: n[m] + " '" + String(y).slice(2), year: y, month: m };
 }
 
+// incomeConfig loaded from Income tab — array of {person, biweekly, effectiveDate}
+let incomeConfig = [];
+
 function getIncome(idx) {
   const mo = months[idx];
-  if (!mo) return {eric:0, mattie:0, total:16583.30};
-  const BASE = 16583.30;
-  const ES = 5678.35 / (5678.35 + 2613.30);
-  const MS = 1 - ES;
-  const eric   = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1)) ? BASE * ES * 1.03 : BASE * ES;
-  const mattie = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6)) ? BASE * MS * 1.035 : BASE * MS;
-  return {eric, mattie, total: eric + mattie};
+  if (!mo) return {eric:0, mattie:0, total:0};
+
+  // If incomeConfig not loaded yet, fall back to hardcoded defaults
+  if (!incomeConfig.length) {
+    const BASE = 16583.30;
+    const ES = 5678.35 / (5678.35 + 2613.30);
+    const MS = 1 - ES;
+    const eric   = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1)) ? BASE * ES * 1.03 : BASE * ES;
+    const mattie = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6)) ? BASE * MS * 1.035 : BASE * MS;
+    return {eric, mattie, total: eric + mattie};
+  }
+
+  // Build monthly pay for each person by finding which biweekly rate applies
+  // for each of the ~2 pay periods in this month
+  const monthStart = new Date(mo.year, mo.month - 1, 1);
+  const monthEnd   = new Date(mo.year, mo.month, 0);
+
+  function monthlyForPerson(person) {
+    // Get all rates for this person sorted by effective date descending
+    const rates = incomeConfig
+      .filter(r => r.person.toLowerCase() === person.toLowerCase())
+      .sort((a, b) => new Date(b.effectiveDate) - new Date(a.effectiveDate));
+    if (!rates.length) return 0;
+
+    // Simulate biweekly paydays in this month
+    // Use a fixed anchor date (first payday on record) and step by 14 days
+    const anchor = new Date(rates[rates.length - 1].effectiveDate);
+    const paydays = [];
+    // Find paydays within this month
+    let d = new Date(anchor);
+    // Step forward to reach this month's range
+    while (d < monthStart) d = new Date(d.getTime() + 14 * 86400000);
+    // Step back in case we overshot
+    while (d > monthStart) d = new Date(d.getTime() - 14 * 86400000);
+    // Now collect all paydays in this month
+    let cur = new Date(d);
+    while (cur <= monthEnd) {
+      if (cur >= monthStart) paydays.push(new Date(cur));
+      cur = new Date(cur.getTime() + 14 * 86400000);
+    }
+    if (!paydays.length) paydays.push(monthStart); // fallback
+
+    // For each payday, find the applicable rate
+    let total = 0;
+    paydays.forEach(pd => {
+      const rate = rates.find(r => new Date(r.effectiveDate) <= pd) || rates[rates.length - 1];
+      total += rate.biweekly;
+    });
+
+    // Normalize to monthly: actual paychecks received / expected paychecks per month
+    // Expected = 26/12 paychecks per month on average
+    // Use actual paydays collected, but scale to 26/12 average for consistent projection
+    const expectedPerMonth = 26 / 12;
+    return total / paydays.length * expectedPerMonth;
+  }
+
+  const eric   = monthlyForPerson('Eric');
+  const mattie = monthlyForPerson('Mattie');
+
+  // Apply scheduled raises if configured
+  // Eric +3% Jan 2027, Mattie +3.5% Jun 2027
+  const ericRaised   = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1))  ? eric   * 1.03  : eric;
+  const mattieRaised = (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6))  ? mattie * 1.035 : mattie;
+
+  return {eric: ericRaised, mattie: mattieRaised, total: ericRaised + mattieRaised};
 }
 
 function getBudget(idx, cat) {
@@ -2323,6 +2384,31 @@ async function loadTrackerData() {
   if (mmRows.length > 1) mmRows.slice(1).forEach(r => {
     if (r[0] && r[1]) merchantMap[r[0].toLowerCase()] = r[1];
   });
+
+  // Load Income tab
+  try {
+    const incRows = await readSheet(BUDGET_SHEET_ID, 'Income!A:C');
+    incomeConfig = [];
+    if (incRows.length > 1) incRows.slice(1).forEach(r => {
+      if (r[0] && r[1]) incomeConfig.push({
+        person: r[0],
+        biweekly: parseFloat(r[1]) || 0,
+        effectiveDate: r[2] || '2026-06-01'
+      });
+    });
+  } catch(e) {
+    console.log('Income tab not found, using defaults:', e.message);
+  }
+
+  // Load Windfall tab into planConfig overrides
+  try {
+    const wfRows = await readSheet(BUDGET_SHEET_ID, 'Windfall!A:C');
+    if (wfRows.length > 1) wfRows.slice(1).forEach(r => {
+      if (r[0] && r[2]) planConfig[r[0]] = '$' + parseFloat(r[2]).toLocaleString();
+    });
+  } catch(e) {
+    console.log('Windfall tab not found, using defaults:', e.message);
+  }
 }
 // ── SAVE ──────────────────────────────────────────────────────────────────────
 function scheduleSave() {
@@ -2403,10 +2489,34 @@ async function setupBudgetSheet() {
     await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFunds!A1',    [['Category','IsActive','ActiveFrom','RunningBalance']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'TrackerBudgets!A1',  [['Month','Category','Amount']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     [['Key','Label','YearMonth']]);
+    await setupIncomeTab();
+    await setupWindfallTab();
   } catch (e) {
     setLoadingError('Sheet setup error: ' + e.message + ' — check tab names exist in your Google Sheet');
     throw e;
   }
+}
+
+async function setupIncomeTab() {
+  await clearAndWrite(BUDGET_SHEET_ID, 'Income!A1', [
+    ['Person', 'Biweekly', 'EffectiveDate', 'Notes'],
+    ['Eric',   5678.35,    '2026-06-01',    'Current take-home biweekly'],
+    ['Mattie', 2613.30,    '2026-06-01',    '1st June paycheck (old rate)'],
+    ['Mattie', 2574.19,    '2026-06-16',    '2nd June paycheck onward (retirement contribution change)'],
+  ]);
+}
+
+async function setupWindfallTab() {
+  await clearAndWrite(BUDGET_SHEET_ID, 'Windfall!A1', [
+    ['Key',                  'Label',                        'Amount', 'Notes'],
+    ['windfall_roth_eric',   'Eric Roth IRA (backdoor)',     7500,     'Annual contribution'],
+    ['windfall_roth_mattie', 'Mattie Roth IRA (backdoor)',   7500,     'Annual contribution'],
+    ['windfall_vacation',    'Annual vacation',              5000,     'Family trip'],
+    ['windfall_christmas',   'Christmas fund',               2000,     'Gifts & festivities'],
+    ['windfall_home',        'Home projects top-up',         1000,     'Annual contribution'],
+    ['windfall_car_mattie',  "Mattie's car fund boost",      1463,     'Toward SUV Dec 2028'],
+    ['windfall_emergency',   'Emergency fund boost',         1464,     'Annual contribution'],
+  ]);
 }
 
 async function setupPlanSheet() {
@@ -2462,33 +2572,42 @@ const DEFAULT_BUDGET_DATA = [
 
 // ── DEFAULT PLAN DATA ─────────────────────────────────────────────────────────
 const DEFAULT_PLAN_DATA = [
-  ['income_monthly',     '$16,583.30'],
-  ['windfall_annual',    '$25,927'],
-  ['invested_annual',    '$67,702'],
-  ['balance_401k',       '$370,000'],
-  ['balance_roth',       '$50,000'],
-  ['balance_aftertax',   '$26,000'],
-  ['balance_hsa',        '$3,000'],
+  // Income (now also managed in Income tab — Plan tab is reference only)
+  ['income_monthly',       '$17,880.50'],  // Eric + Mattie new rate from Jul26
+  ['eric_biweekly',        '$5,678.35'],
+  ['mattie_biweekly',      '$2,574.19'],   // updated Jun 2026
+  ['eric_age',             '37'],
+  ['mattie_age',           '36'],
+  // Windfall (also managed in Windfall tab)
+  ['windfall_annual',      '$25,927'],
+  // Retirement balances
+  ['balance_401k',         '$370,000'],
+  ['balance_roth',         '$50,000'],
+  ['balance_aftertax',     '$26,000'],
+  ['balance_hsa',          '$3,000'],
   ['balance_retirement_total', '$449,000'],
-  ['emergency_balance',  '$17,500'],
-  ['emergency_target',   '$78,000'],
-  ['529_kinsley',        '$15,500'],
-  ['529_kyle',           '$16,000'],
-  ['529_collins',        '$3,000'],
-  ['hsa_annual',         '$6,400'],
-  ['contrib_401k',       '$30,000'],
-  ['contrib_match',      '$16,302'],
-  ['contrib_roth_ira',   '$15,000'],
-  ['windfall_roth_eric', '$7,500'],
-  ['windfall_roth_mattie','$7,500'],
-  ['windfall_vacation',  '$5,000'],
-  ['windfall_christmas', '$2,000'],
-  ['windfall_home',      '$1,000'],
-  ['windfall_car_mattie','$1,463'],
-  ['windfall_emergency', '$1,464'],
-  ['car_mattie_saved',   '$4,300'],
-  ['eric_age',           '37'],
-  ['mattie_age',         '36'],
+  // Retirement contributions — update these when contribution amounts change
+  ['contrib_401k',         '$30,000'],     // combined both 401ks
+  ['contrib_match',        '$16,302'],     // employer match
+  ['contrib_roth_ira',     '$15,000'],     // backdoor Roth (via windfall)
+  ['hsa_annual',           '$6,400'],
+  ['invested_annual',      '$61,302'],     // 401k + match + HSA (excl Roth which comes from windfall)
+  // Emergency fund
+  ['emergency_balance',    '$17,500'],
+  ['emergency_target',     '$78,000'],
+  // 529 balances
+  ['529_kinsley',          '$15,500'],
+  ['529_kyle',             '$16,000'],
+  ['529_collins',          '$3,000'],
+  // Windfall allocations (also in Windfall tab — keep in sync)
+  ['windfall_roth_eric',   '$7,500'],
+  ['windfall_roth_mattie', '$7,500'],
+  ['windfall_vacation',    '$5,000'],
+  ['windfall_christmas',   '$2,000'],
+  ['windfall_home',        '$1,000'],
+  ['windfall_car_mattie',  '$1,463'],
+  ['windfall_emergency',   '$1,464'],
+  ['car_mattie_saved',     '$4,300'],
 ];
 // ── BOOT ──────────────────────────────────────────────────────────────────────
 (async () => {
