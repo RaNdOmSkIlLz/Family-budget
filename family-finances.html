@@ -1378,7 +1378,6 @@ async function syncPlaidTransactions() {
   if (status) status.textContent = 'Fetching from Chase...';
 
   try {
-    // Use the selected tracker month's date range
     const mo = months[trackerIdx];
     const startDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-01`;
     const lastDay = new Date(mo.year, mo.month, 0).getDate();
@@ -1388,35 +1387,62 @@ async function syncPlaidTransactions() {
     const {transactions, error} = await r.json();
     if (error) throw new Error(JSON.stringify(error));
 
-    // Strict client-side filter: only the selected month (guards against TZ edge cases)
     const monthStart = new Date(mo.year, mo.month - 1, 1);
     const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
 
+    // Build fingerprints of already-logged transactions to catch posted duplicates
+    // of pending transactions we already confirmed
+    const confirmedFingerprints = new Set();
+    budgetPlan.forEach(cat => {
+      getTxns(trackerIdx, cat.Category).forEach(t => {
+        confirmedFingerprints.add(`${t.desc}|${Math.abs(t.amt).toFixed(2)}`);
+      });
+    });
+
     pendingTxns = (transactions || [])
       .filter(t => {
+        // Pending txns show today's date — include them regardless of date
         const d = new Date(t.date + 'T12:00:00');
-        return d >= monthStart && d <= monthEnd && t.amount > 0;
+        return (t.pending || (d >= monthStart && d <= monthEnd)) && t.amount > 0;
       })
-      .filter(t => !trackerData.confirmedPlaidIds.has(t.transaction_id))
+      .filter(t => {
+        if (trackerData.confirmedPlaidIds.has(t.transaction_id)) return false;
+        // Skip posted version if we already confirmed the pending version
+        if (!t.pending) {
+          const fp = `${t.merchant_name || t.name}|${t.amount.toFixed(2)}`;
+          if (confirmedFingerprints.has(fp)) return false;
+        }
+        return true;
+      })
       .map(t => ({
         id:            t.transaction_id,
         merchant:      t.merchant_name || t.name,
-        rawName:       t.name,                    // raw Chase description e.g. "HEB #577 SUGAR LAND TX"
+        rawName:       t.name,
         amount:        t.amount,
         date:          t.date,
+        pending:       t.pending || false,
         plaidCategory: t.personal_finance_category?.primary || t.category?.[0] || '',
         suggestedCat:  guessCategoryFromMerchant(t.name) || guessCategoryFromMerchant(t.merchant_name),
         splits:        null,
       }));
 
-    if (status) status.textContent = pendingTxns.length
-      ? `${pendingTxns.length} transactions to review (${mo.label})`
-      : `All ${mo.label} transactions already logged ✓`;
-    if (btn) { btn.textContent = '↺ Sync Chase (30 days)'; btn.disabled = false; }
+    const pendingCount = pendingTxns.filter(t => t.pending).length;
+    const postedCount  = pendingTxns.filter(t => !t.pending).length;
+    if (status) {
+      if (!pendingTxns.length) {
+        status.textContent = `All ${mo.label} transactions logged \u2713`;
+      } else {
+        const parts = [];
+        if (postedCount)  parts.push(`${postedCount} posted`);
+        if (pendingCount) parts.push(`${pendingCount} pending`);
+        status.textContent = `${parts.join(', ')} to review`;
+      }
+    }
+    if (btn) { btn.textContent = `\u21BA Sync Chase (${mo.label})`; btn.disabled = false; }
     renderTracker(trackerIdx);
   } catch (e) {
     if (status) status.textContent = 'Error: ' + e.message;
-    if (btn) { btn.textContent = '↺ Sync Chase (30 days)'; btn.disabled = false; }
+    if (btn) { btn.textContent = `\u21BA Sync Chase (${months[trackerIdx].label})`; btn.disabled = false; }
   }
 }
 
@@ -1538,11 +1564,17 @@ function renderPendingQueue() {
     // If user actively changes the dropdown away from the suggestion → auto-confirm
     // If suggestion was already selected → still requires ✓ click
     const showRaw = txn.rawName && txn.rawName !== txn.merchant;
+    const pendingBadge = txn.pending
+      ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600;flex-shrink:0">⏳ Pending</span>'
+      : '';
     const singleRow = !txn.splits ? `
       <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-bottom:1px solid #f9f9f9;justify-content:flex-start">
         <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0;min-width:36px">${dateDisplay}</span>
         <div style="flex-shrink:0;max-width:240px">
-          <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+            ${pendingBadge}
+          </div>
           ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
         </div>
         <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">\$${txn.amount.toFixed(2)}</span>
@@ -1566,7 +1598,10 @@ function renderPendingQueue() {
         <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
           <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
           <div style="flex-shrink:0;max-width:240px">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
+              ${txn.pending ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600">⏳ Pending</span>' : ''}
+            </div>
             ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
           </div>
           <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
