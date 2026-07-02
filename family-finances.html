@@ -277,12 +277,13 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 <div class="modal-bg" id="modalAdd">
   <div class="modal">
     <h3 id="modalAddTitle">Add transaction</h3>
-    <label>Description</label>
-    <input type="text" id="addDesc" placeholder="e.g. HEB groceries" autocomplete="off">
-    <label style="margin-top:12px">Categories</label>
+    <label>Amount</label>
     <div id="addRows"></div>
     <div class="split-remaining" id="addRemaining" style="display:none"></div>
-    <button class="btn-secondary" style="width:100%;margin:8px 0" onclick="addSplitRow()">+ Add another category</button>
+    <label style="margin-top:10px">Description</label>
+    <input type="text" id="addDesc" placeholder="e.g. HEB groceries" autocomplete="off"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();saveAdd()}">
+    <button class="btn-secondary" style="width:100%;margin:8px 0" onclick="addSplitRow(null,null)">+ Add another category</button>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal()">Cancel</button>
       <button class="btn-save" onclick="saveAdd()">Save</button>
@@ -1168,6 +1169,7 @@ function openAdd(idx, cat) {
   modalCtx = {idx};
   document.getElementById('modalAddTitle').textContent = 'Add transaction';
   document.getElementById('addDesc').value = '';
+  document.getElementById('addDesc').style.display = '';
   document.getElementById('addRows').innerHTML = '';
   document.getElementById('addRemaining').style.display = 'none';
   addSplitRow(cat, null);
@@ -1183,13 +1185,17 @@ function addSplitRow(defaultCat, defaultAmt) {
   const div = document.createElement('div');
   div.className = 'split-row';
   div.innerHTML = `
-    <select onchange="updateAddRemaining()">${opts}</select>
+    <select onchange="updateAddRemaining()" tabindex="3">${opts}</select>
     <input type="number" placeholder="0.00" step="0.01" min="0"
       value="${defaultAmt !== null && defaultAmt !== undefined ? defaultAmt : ''}"
       oninput="updateAddRemaining()"
-      onkeydown="if(event.key==='Enter'){event.preventDefault();saveAdd()}">
-    <button onclick="this.parentElement.remove();updateAddRemaining()">&#xD7;</button>`;
+      tabindex="1"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();saveAdd()};if(event.key==='Tab'){event.preventDefault();document.getElementById('addDesc').focus()}">
+    <button onclick="this.parentElement.remove();updateAddRemaining()" tabindex="-1">&#xD7;</button>`;
   document.getElementById('addRows').appendChild(div);
+  // Description is tabindex 2 — Tab from amount lands here, Enter submits
+  const descEl = document.getElementById('addDesc');
+  if (descEl) descEl.setAttribute('tabindex', '2');
   updateAddRemaining();
 }
 
