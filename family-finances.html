@@ -637,8 +637,9 @@ function calcAvailable(idx) {
       if (t.desc === 'Covered from surplus' && t.amt < 0) covered += Math.abs(t.amt);
     });
   });
-  const unallocated = Math.max(0, income - totalBudget);
-  return {freed, unallocated, total: Math.max(0, freed + unallocated - covered)};
+  const unallocated = income - totalBudget; // can be negative if over-budgeted
+  const total = freed + unallocated - covered;
+  return {freed, unallocated, total}; // total can be negative
 }
 // ── MONTH NAV ─────────────────────────────────────────────────────────────────
 function renderMonthNav(containerId, activeIdx, showAddBtn) {
@@ -748,7 +749,7 @@ function renderTracker(idx) {
   document.getElementById('trackerCards').innerHTML =
     `<div class="card"><div class="card-label">Income</div><div class="card-value blue">${fmt(income)}</div></div>` +
     `<div class="card"><div class="card-label">Spent</div><div class="card-value ${totalActual > 0 ? 'green' : ''}">${fmt(totalActual)}</div></div>` +
-    `<div class="card"><div class="card-label">Available</div><div class="card-value orange">${fmt(avail.total)}</div></div>`;
+    `<div class="card"><div class="card-label">Available</div><div class="card-value" style="color:${avail.total < 0 ? '#ff3b30' : '#ff9500'}">${avail.total < 0 ? '-' : ''}${fmt(Math.abs(avail.total))}</div></div>`;
 
   // Sync button
   const syncRow = document.getElementById('syncTxnRow');
@@ -760,11 +761,15 @@ function renderTracker(idx) {
   const pqEl = document.getElementById('pendingQueue');
   if (pqEl) pqEl.innerHTML = renderPendingQueue();
 
-  // Surplus banner
+  // Surplus/deficit banner
   const sb = document.getElementById('surplusBanner');
-  sb.innerHTML = avail.total > 0
-    ? `<div class="surplus-banner">💰 <strong>${fmt(avail.total)}</strong> available — ${fmt(avail.freed)} freed from closed categories${avail.unallocated > 0 ? ' · ' + fmt(avail.unallocated) + ' unallocated' : ''}</div>`
-    : '';
+  if (avail.total > 0.005) {
+    sb.innerHTML = `<div class="surplus-banner">💰 <strong>${fmt(avail.total)}</strong> available — ${fmt(avail.freed)} freed from closed categories${avail.unallocated > 0 ? ' · ' + fmt(avail.unallocated) + ' unallocated' : ''}</div>`;
+  } else if (avail.total < -0.005) {
+    sb.innerHTML = `<div class="surplus-banner" style="background:#fff0f0;border-color:#ff3b30;color:#c0392b">⚠️ <strong>${fmt(Math.abs(avail.total))}</strong> over budget — budgeted categories exceed income by this amount</div>`;
+  } else {
+    sb.innerHTML = '';
+  }
 
   // Group categories by section
   const sections = {};
