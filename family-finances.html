@@ -2661,7 +2661,7 @@ Respond with exactly these 5 sections using these exact headers:
 ## QUICK WIN
 (One specific actionable thing they can do this month)
 
-## SPENDING OBSERVATIONS  
+## SPENDING OBSERVATIONS
 (3-5 observations about spending patterns, over-budget categories, or trends)
 
 ## RECURRING CHARGES
@@ -2673,20 +2673,16 @@ Respond with exactly these 5 sections using these exact headers:
 ## BIG MOVE
 (The single highest-impact financial change available to them right now)`;
 
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
+  // Call through Vercel proxy — API key stays secure on server
+  const response = await fetch(PLAID_SERVER + '/api/insights', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages: [{role: 'user', content: userPrompt}],
-      system: systemPrompt,
-    })
+    body: JSON.stringify({systemPrompt, userPrompt}),
   });
 
   const data = await response.json();
-  if (data.error) throw new Error(data.error.message);
-  return data.content?.[0]?.text || '';
+  if (data.error) throw new Error(data.error);
+  return data.content || '';
 }
 // ── RETIREMENT ────────────────────────────────────────────────────────────────
 function renderRetirement() {
