@@ -221,7 +221,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
   </div>
 
   <div class="tabs">
-    <div class="tab active" onclick="showTab('tracker',this)">Tracker</div>
+    <div class="tab active" onclick="showTab('tracker',this)">Budget Overview</div>
     <div class="tab" onclick="showTab('monthly',this)">Monthly</div>
     <div class="tab" onclick="showTab('projection',this)">Projection</div>
     <div class="tab" onclick="showTab('snapshot',this)">Snapshot</div>
@@ -2486,6 +2486,30 @@ function formatInsightsText(text) {
     .replace(/$/, '</p>');
 }
 
+async function saveInsights() {
+  if (!lastInsights) return;
+  try {
+    await clearAndWrite(BUDGET_SHEET_ID, 'Insights!A1', [
+      ['Key', 'Value'],
+      ['timestamp', lastInsights.timestamp],
+      ['eric',      lastInsights.eric],
+      ['mattie',    lastInsights.mattie],
+    ]);
+  } catch(e) { console.error('Insights save error:', e.message); }
+}
+
+async function loadInsights() {
+  try {
+    const rows = await readSheet(BUDGET_SHEET_ID, 'Insights!A:B');
+    if (rows.length < 2) return;
+    const data = {};
+    rows.slice(1).forEach(r => { if (r[0]) data[r[0]] = r[1] || ''; });
+    if (data.eric && data.mattie) {
+      lastInsights = {eric: data.eric, mattie: data.mattie, timestamp: data.timestamp || ''};
+    }
+  } catch(e) { console.log('Insights tab not found:', e.message); }
+}
+
 async function runInsights() {
   const btn = document.getElementById('insightsBtn');
   if (btn) { btn.textContent = '⏳ Analyzing...'; btn.disabled = true; }
@@ -2511,6 +2535,9 @@ async function runInsights() {
       mattie:    mattieResult,
       timestamp: new Date().toLocaleString('en-US', {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}),
     };
+
+    // Persist to Google Sheet
+    await saveInsights();
 
     renderInsights();
   } catch(e) {
@@ -3035,6 +3062,7 @@ async function initApp() {
     renderWindfall();
     renderRetirement();
     renderGoals();
+    await loadInsights();
     renderInsights();
   } catch (e) {
     console.error('initApp error:', e);
