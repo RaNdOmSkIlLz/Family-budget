@@ -17,7 +17,6 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:16px 16px 48px}
-body.tr-active{padding:0;background:#0d1021}
 h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .subtitle{font-size:13px;color:#6e6e73;margin-bottom:14px}
 /* TABS */
@@ -26,7 +25,8 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .tab{flex-shrink:0;padding:7px 13px;border-radius:20px;border:1.5px solid #d1d1d6;background:#fff;font-size:13px;font-weight:500;color:#3a3a3c;cursor:pointer;white-space:nowrap}
 .tab.active{background:#007aff;border-color:#007aff;color:#fff}
 .view{display:none}.view.active{display:block}
-#tracker.active{display:flex;flex-direction:column;margin:-16px -16px -48px;padding:0}
+#tracker{position:relative}
+#tracker.active{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;bottom:0;z-index:5;padding:0;margin:0;overflow:hidden}
 /* AUTH */
 #authScreen{text-align:center;padding:40px 20px}
 #authScreen h2{font-size:20px;font-weight:600;margin-bottom:12px}
@@ -177,7 +177,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .ss-btn{flex:1;padding:8px 4px;border-radius:10px;border:1.5px solid #d1d1d6;background:#fff;font-size:14px;font-weight:500;color:#3a3a3c;cursor:pointer}
 .ss-btn.ss-active{background:#007aff;border-color:#007aff;color:#fff}
 /* BUDGET OVERVIEW DASHBOARD */
-.tr-layout{display:flex;height:calc(100vh - 56px);overflow:hidden;background:#0d1021}
+.tr-layout{display:flex;height:100%;overflow:hidden;background:#0d1021}
 .tr-sidebar{width:220px;background:#111424;border-right:1px solid #252840;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#252840 transparent}
 .tr-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d1021;min-width:0}
 .tr-sum-bar{display:flex;align-items:stretch;background:#161929;border-bottom:1px solid #252840;height:52px;flex-shrink:0}
@@ -3593,7 +3593,6 @@ function showTab(id, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
-  document.body.classList.toggle('tr-active', id === 'tracker');
   if (id === 'projection') buildProjection();
   if (id === 'tracker') requestAnimationFrame(() => trDrawSankey(trackerIdx, getTrSections()));
 }
