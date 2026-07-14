@@ -381,6 +381,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
               <div class="sync-dot" id="syncDot"></div>
               <span id="syncStatus" style="color:#555878;font-size:11px">Saved</span>
             </div>
+            <button class="tr-btn-ghost" onclick="openAddIncome()">+ Income</button>
             <button class="tr-btn-ghost" onclick="openAdd(trackerIdx, budgetPlan[0]?.Category)">+ Add</button>
             <button class="tr-btn-primary" id="syncTxnBtn" onclick="syncPlaidTransactions()">&#8635; Sync Chase</button>
           </div>
@@ -479,6 +480,7 @@ const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googlea
 const PLAID_SERVER = 'https://family-budget-server.vercel.app';
 const WINDOW_SIZE = 6;
 const SAVING_SECTIONS = ['529s', 'Kids Cars & Weddings', 'Savings Goals'];
+const EXCLUDED_SECTION = 'Excluded'; // Categories in this section are excluded from all budget math
 
 const MONTH_KEYS_BASE = [
   'Jun26','Jul26','Aug26','Sep26','Oct26','Nov26','Dec26',
@@ -623,7 +625,6 @@ function getIncome(idx) {
   const mattieBiweekly = rateForPerson('Mattie');
 
   // Both Eric and Mattie budgeted as bimonthly (2 paychecks/month)
-  // Extra paychecks (Eric gets 2 extra/yr, Mattie gets 2 extra/yr) go to windfall
   let eric   = ericBiweekly * 2;
   let mattie = mattieBiweekly * 2;
 
@@ -631,7 +632,17 @@ function getIncome(idx) {
   if (mo.year > 2027 || (mo.year === 2027 && mo.month >= 1))  eric   *= 1.03;
   if (mo.year > 2027 || (mo.year === 2027 && mo.month >= 6))  mattie *= 1.035;
 
-  return {eric, mattie, total: eric + mattie};
+  // Add any one-time extra income logged for this specific month
+  // These are stored in incomeConfig with person='Extra' and effectiveDate = first of month
+  const monthKey = `${mo.year}-${String(mo.month).padStart(2,'0')}`;
+  const extras = incomeConfig.filter(r =>
+    r.person === 'Extra' &&
+    r.effectiveDate &&
+    r.effectiveDate.startsWith(monthKey)
+  );
+  const extraTotal = extras.reduce((s, r) => s + r.biweekly, 0);
+
+  return {eric, mattie, extra: extraTotal, total: eric + mattie + extraTotal};
 }
 
 function getBudget(idx, cat) {
@@ -804,6 +815,7 @@ function calcAvailable(idx) {
   const income = getIncome(idx).total;
   let totalBudget = 0, freed = 0, covered = 0;
   budgetPlan.forEach(cat => {
+    if (cat.Section === EXCLUDED_SECTION) return; // skip excluded
     const budget = getBudget(idx, cat.Category);
     totalBudget += budget;
     const st = getState(idx, cat.Category);
@@ -815,9 +827,9 @@ function calcAvailable(idx) {
       if (t.desc === 'Covered from surplus' && t.amt < 0) covered += Math.abs(t.amt);
     });
   });
-  const unallocated = income - totalBudget; // can be negative if over-budgeted
+  const unallocated = income - totalBudget;
   const total = freed + unallocated - covered;
-  return {freed, unallocated, total}; // total can be negative
+  return {freed, unallocated, total};
 }
 // ── MONTH NAV (sidebar version) ───────────────────────────────────────────────
 function renderMonthNav(containerId, activeIdx, showAddBtn) {
@@ -873,15 +885,20 @@ let trDepth = 2;          // sankey depth: 2=sections, 3=categories, 4=transacti
 let trSankeyNodes = [], trSankeyLinks = [], trHovered = null;
 let trDragSrc = null;
 
-// Build ordered section list from budgetPlan
+// Build ordered section list from budgetPlan — excludes the Excluded section from budget math
 function getTrSections() {
   const map = {};
   budgetPlan.forEach(cat => {
     const sec = cat.Section || 'Other';
-    if (!map[sec]) map[sec] = {name: sec, color: cat.Color || '#8e8e93', cats: []};
+    if (!map[sec]) map[sec] = {name: sec, color: cat.Color || '#8e8e93', cats: [], excluded: sec === EXCLUDED_SECTION};
     map[sec].cats.push(cat);
   });
   return Object.values(map);
+}
+
+// Budget sections only (excludes the Excluded section)
+function getBudgetSections() {
+  return getTrSections().filter(s => !s.excluded);
 }
 
 // Value to use for a category in Sankey
@@ -897,10 +914,11 @@ function renderTracker(idx) {
   trackerIdx = idx;
   const income = getIncome(idx).total;
   const sections = getTrSections();
+  const budgetSections = getBudgetSections();
 
-  // Summary bar
+  // Summary bar — only count non-excluded sections
   let totalBudgeted = 0, totalSpent = 0;
-  sections.forEach(sec => {
+  budgetSections.forEach(sec => {
     sec.cats.forEach(cat => {
       totalBudgeted += getBudget(idx, cat.Category);
       totalSpent += getActual(idx, cat.Category) || 0;
@@ -1049,7 +1067,7 @@ function trSetDepth(d, btn) {
 // ── SANKEY ────────────────────────────────────────────────────────────────────
 function trBuildSankeyData(idx, sections) {
   trSankeyNodes = []; trSankeyLinks = [];
-  const secList = trActiveSec !== null ? [sections[trActiveSec]] : sections;
+  const secList = trActiveSec !== null ? [sections[trActiveSec]] : getBudgetSections();
   const totalVal = secList.reduce((s, sec) => s + sec.cats.reduce((ss, cat) => ss + trCatVal(cat, idx), 0), 0);
   const income = getIncome(idx).total;
   const incomeVal = trActiveSec !== null ? totalVal : income;
@@ -1745,8 +1763,9 @@ function updateAddRemaining() {
 function saveAdd() {
   if (!modalCtx) return;
 
-  // Windfall modal has its own save function
+  // Route special modal types
   if (modalCtx.type === 'windfall') { saveWindfall(); return; }
+  if (modalCtx.type === 'income')   { saveAddIncome(); return; }
 
   const desc = document.getElementById('addDesc').value.trim() || 'Transaction';
   const rows = document.querySelectorAll('#addRows .split-row');
@@ -1789,10 +1808,52 @@ function saveAdd() {
   renderTracker(savedIdx);
 }
 
-function closeModal() {
-  document.getElementById('modalAdd').classList.remove('open');
-  document.getElementById('addDesc').style.display = '';
-  modalCtx = null;
+function openAddIncome() {
+  const mo = months[trackerIdx];
+  modalCtx = {type: 'income', idx: trackerIdx};
+  document.getElementById('modalAddTitle').textContent = 'Add income · ' + mo.label;
+  document.getElementById('addRows').innerHTML = `
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Source / Label</label>
+    <input type="text" id="incomeLabel" placeholder="e.g. Work reimbursement, Side project"
+      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('incomeAmount').focus()}">
+    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Amount</label>
+    <input type="number" id="incomeAmount" placeholder="0.00" step="0.01" min="0"
+      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      onkeydown="if(event.key==='Enter'){event.preventDefault();saveAddIncome()}">
+  `;
+  document.getElementById('addDesc').style.display = 'none';
+  document.getElementById('addRemaining').style.display = 'none';
+  document.getElementById('modalAdd').classList.add('open');
+  setTimeout(() => document.getElementById('incomeLabel')?.focus(), 100);
+}
+
+function saveAddIncome() {
+  if (!modalCtx || modalCtx.type !== 'income') return;
+  const label  = document.getElementById('incomeLabel')?.value?.trim();
+  const amount = parseFloat(document.getElementById('incomeAmount')?.value);
+  if (!label || !amount || amount <= 0) return;
+
+  const mo = months[modalCtx.idx];
+  const effectiveDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-01`;
+
+  // Add to incomeConfig as a one-time Extra entry
+  incomeConfig.push({person: 'Extra', biweekly: amount, effectiveDate, notes: label});
+
+  // Save to Income tab in sheet
+  const saveIncome = async () => {
+    try {
+      const existing = await readSheet(BUDGET_SHEET_ID, 'Income!A:D');
+      const rows = existing.length ? existing : [['Person','Biweekly','EffectiveDate','Notes']];
+      rows.push(['Extra', amount, effectiveDate, label]);
+      await clearAndWrite(BUDGET_SHEET_ID, 'Income!A1', rows);
+      console.log('Extra income saved:', label, amount);
+    } catch(e) { console.error('Save extra income error:', e.message); }
+  };
+  saveIncome();
+
+  closeModal();
+  renderTracker(modalCtx.idx);
 }
 
 document.getElementById('modalAdd').addEventListener('click', e => { if (e.target.id === 'modalAdd') closeModal(); });
@@ -1819,6 +1880,7 @@ function renderMonthly(idx) {
   const sections = {};
   let totalExp = 0, totalSav = 0;
   budgetPlan.forEach(cat => {
+    if (cat.Section === EXCLUDED_SECTION) return;
     const sec = cat.Section || 'Other';
     if (!sections[sec]) sections[sec] = {col: cat.Color || '#8e8e93', items: []};
     sections[sec].items.push(cat);
@@ -1879,6 +1941,7 @@ function buildProjection() {
     const inc = getIncome(idx).total;
     let exp = 0, sav = 0;
     budgetPlan.forEach(cat => {
+      if (cat.Section === EXCLUDED_SECTION) return;
       const b = getPlanBudget(idx, cat.Category);
       if (SAVING_SECTIONS.includes(cat.Section)) sav += b; else exp += b;
     });
