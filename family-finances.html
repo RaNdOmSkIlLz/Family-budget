@@ -17,6 +17,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:16px 16px 48px}
+body.tr-active{padding:0;background:#0d1021;overflow:hidden}
 h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .subtitle{font-size:13px;color:#6e6e73;margin-bottom:14px}
 /* TABS */
@@ -174,21 +175,114 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .bar-bg2{background:#e5e5ea;border-radius:6px;height:8px;overflow:hidden}
 .ss-btn{flex:1;padding:8px 4px;border-radius:10px;border:1.5px solid #d1d1d6;background:#fff;font-size:14px;font-weight:500;color:#3a3a3c;cursor:pointer}
 .ss-btn.ss-active{background:#007aff;border-color:#007aff;color:#fff}
-/* DRAG AND DROP */
-.cat-drop-zone{display:none;padding:6px 16px;margin:2px 8px;border:2px dashed #d1d1d6;border-radius:8px;text-align:center;font-size:11px;color:#c7c7cc;transition:all .15s}
-.dragging-active .cat-drop-zone{display:block}
-.cat-drop-zone.drag-over{border-color:#007aff;background:#e8f4ff;color:#007aff}
-[draggable=true]{cursor:grab}
-[draggable=true]:active{cursor:grabbing}
-
-.proj-table{background:#fff;border-radius:14px;overflow:hidden;margin-bottom:14px}
-.proj-row{display:flex;padding:10px 12px;border-bottom:1px solid #f2f2f7;align-items:center}
-.proj-row:last-child{border-bottom:none}
-.proj-row.hdr{background:#f9f9f9;font-size:10px;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.04em}
-.proj-row.raise{background:#f0fff4}
-.proj-month{flex:0 0 64px;font-size:13px;font-weight:500}
-.proj-income,.proj-exp,.proj-sav{flex:1;font-size:13px;font-variant-numeric:tabular-nums}
-.proj-rem{flex:1;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+/* BUDGET OVERVIEW DASHBOARD */
+.tr-layout{display:flex;height:calc(100vh - 110px);overflow:hidden;margin:-16px -16px 0;background:#0d1021}
+.tr-sidebar{width:220px;background:#111424;border-right:1px solid #252840;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#252840 transparent}
+.tr-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d1021}
+.tr-sum-bar{display:flex;align-items:center;gap:0;background:#161929;border-bottom:1px solid #252840;height:46px;flex-shrink:0}
+.tr-sum-item{display:flex;flex-direction:column;padding:0 16px;border-right:1px solid #252840;height:100%;justify-content:center}
+.tr-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878;margin-bottom:1px}
+.tr-sum-value{font-size:14px;font-weight:700}
+.tr-sum-bar-item{flex:1;padding:0 16px;display:flex;align-items:center;gap:8px}
+.tr-sum-progress{flex:1;height:4px;background:#252840;border-radius:2px;overflow:hidden}
+.tr-sum-fill{height:100%;background:linear-gradient(90deg,#4f6ef7,#a855f7);border-radius:2px;transition:width .3s}
+.tr-sum-actions{display:flex;gap:6px;padding:0 12px;margin-left:auto;align-items:center}
+.tr-btn-primary{padding:5px 12px;background:#4f6ef7;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tr-btn-ghost{padding:5px 12px;background:transparent;color:#4f6ef7;border:1px solid #252840;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+/* Sidebar internals */
+.tr-sb-section{padding:10px 14px 4px}
+.tr-sb-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878;display:block;margin-bottom:5px}
+.tr-month-sel{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:2px}
+.tr-msel{padding:3px 8px;border-radius:6px;border:1px solid #252840;background:transparent;font-size:11px;font-weight:500;color:#555878;cursor:pointer;white-space:nowrap}
+.tr-msel.active{background:#4f6ef7;border-color:#4f6ef7;color:#fff}
+.tr-month-chevrons{display:flex;gap:4px;margin-top:4px}
+.tr-mchev{background:#1a1e35;border:1px solid #252840;border-radius:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:#9698b0}
+.tr-mchev:disabled{opacity:.3;cursor:default}
+.tr-sec-nav{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
+.tr-sec-nav:hover{background:#1a1e35}
+.tr-sec-nav.active{background:#1a1e35;border-left-color:var(--tc)}
+.tr-sec-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.tr-sec-name{flex:1;font-size:12px;font-weight:500;color:#8890b0}
+.tr-sec-nav.active .tr-sec-name{color:#e8e9ed;font-weight:600}
+.tr-sec-stat{font-size:10px;font-weight:700}
+.tr-sec-mini{height:2px;background:#252840;margin:0 14px 2px;border-radius:1px}
+.tr-sec-mini-fill{height:100%;border-radius:1px}
+.tr-sb-footer{padding:10px 14px;border-top:1px solid #252840;margin-top:auto}
+.tr-overall-bar{height:5px;background:#252840;border-radius:3px;overflow:hidden;display:flex;margin:4px 0}
+.tr-overall-seg{height:100%}
+/* Sankey panel */
+.tr-sankey-panel{background:#111424;border-bottom:1px solid #252840;padding:14px 20px 10px;flex-shrink:0}
+.tr-sankey-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.tr-sankey-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
+.tr-depth-btns{display:flex;gap:3px}
+.tr-dbtn{padding:2px 9px;border-radius:5px;border:1px solid #252840;background:transparent;font-size:10px;color:#555878;cursor:pointer;font-weight:500}
+.tr-dbtn.active{background:#4f6ef7;border-color:#4f6ef7;color:#fff}
+#trSankeyCanvas{display:block;width:100%}
+/* Section detail */
+.tr-sec-detail{flex:1;overflow-y:auto;padding:16px 20px;scrollbar-width:thin;scrollbar-color:#252840 transparent}
+.tr-sec-hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px}
+.tr-sec-title{font-size:18px;font-weight:800;margin-bottom:2px}
+.tr-sec-sub{font-size:11px;color:#555878}
+.tr-sec-stats{display:flex;gap:16px}
+.tr-hs{text-align:right}
+.tr-hs-val{font-size:16px;font-weight:700}
+.tr-hs-lbl{font-size:9px;color:#555878;margin-top:1px;text-transform:uppercase;letter-spacing:.05em}
+/* Cat cards */
+.tr-cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:12px}
+.tr-cat-card{background:#161929;border-radius:11px;padding:14px;border:1.5px solid #252840;cursor:pointer;transition:all .2s;position:relative}
+.tr-cat-card:hover{border-color:#353860;transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.tr-cat-card.tr-done{border-color:#1a3a28;background:#111e18}
+.tr-cat-card.tr-over{border-color:#3a1a1a;background:#1e1111}
+.tr-cat-card.tr-closed{border-color:#1e2235;background:#13151e;opacity:.75}
+.tr-cc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:6px}
+.tr-cc-name{font-size:13px;font-weight:600;color:#e8e9ed;margin-bottom:1px}
+.tr-cc-sub{font-size:10px;color:#555878}
+.tr-cc-badges{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.tr-cc-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;white-space:nowrap}
+.tr-cc-amt{font-size:19px;font-weight:800;letter-spacing:-.5px;margin-bottom:2px}
+.tr-cc-brow{display:flex;justify-content:space-between;font-size:10px;color:#555878;margin-bottom:7px}
+.tr-cc-bar{height:4px;background:#252840;border-radius:2px;overflow:hidden;margin-bottom:8px}
+.tr-cc-fill{height:100%;border-radius:2px;transition:width .3s}
+.tr-cc-foot{display:flex;justify-content:space-between;align-items:center}
+.tr-cc-var{font-size:11px;font-weight:600}
+.tr-cc-acts{display:flex;gap:4px}
+.tr-cc-btn{padding:3px 9px;border-radius:6px;border:none;font-size:10px;font-weight:600;cursor:pointer}
+.tr-cc-add{background:#1a1e35;color:#4f6ef7;border:1px solid #252840}
+.tr-cc-done{background:#252840;color:#555878}
+.tr-cc-done.done{background:#1a3a28;color:#34d47c}
+.tr-cc-lock{background:none;border:none;font-size:13px;cursor:pointer;color:#555878;padding:0 2px}
+.tr-cc-menu{background:none;border:none;font-size:16px;cursor:pointer;color:#555878;padding:0 3px;line-height:1}
+/* Txn drawer */
+.tr-txn-drawer{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px;display:none}
+.tr-txn-drawer.open{display:block}
+.tr-txn-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #252840;background:#161929}
+.tr-txn-title{font-size:12px;font-weight:600}
+.tr-txn-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #1a1e2a;font-size:11px}
+.tr-txn-row:last-child{border-bottom:none}
+.tr-txn-pending{background:#1a1e2a}
+.tr-txn-date{color:#555878;width:36px;flex-shrink:0}
+.tr-txn-desc{flex:1;color:#c0c2d0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-txn-amt{font-weight:600;color:#e8e9ed;white-space:nowrap}
+.tr-txn-edit{background:none;border:none;color:#4f6ef7;cursor:pointer;font-size:11px;padding:0 2px}
+.tr-txn-del{background:none;border:none;color:#ef476f;cursor:pointer;font-size:12px;padding:0 2px}
+/* Surplus/deficit banner */
+.tr-surplus{background:#1a2a10;border-left:3px solid #34d47c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#34d47c}
+.tr-deficit{background:#2a1010;border-left:3px solid #ef476f;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#ef476f}
+/* Drag */
+.tr-drag-handle{color:#555878;font-size:12px;cursor:grab;margin-right:4px;flex-shrink:0}
+.tr-drop-zone{display:none;padding:5px 14px;margin:2px 0;border:1px dashed #252840;border-radius:6px;text-align:center;font-size:10px;color:#555878}
+.dragging-active .tr-drop-zone{display:block}
+.tr-drop-zone.drag-over{border-color:#4f6ef7;background:#1a1e35;color:#4f6ef7}
+/* Pending queue in dark theme */
+.tr-pending-wrap{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px}
+.tr-pending-hdr{padding:8px 14px;border-bottom:1px solid #252840;background:#161929;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
+/* Sync status in dark */
+.tr-sync-wrap{display:flex;align-items:center;gap:8px;padding:6px 0;margin-bottom:6px}
+/* Tooltip */
+.tr-tooltip{position:fixed;background:#1e2240;border:1px solid #353860;border-radius:10px;padding:10px 14px;font-size:12px;pointer-events:none;display:none;z-index:300;min-width:160px}
+.tr-tt-title{font-weight:700;color:#fff;margin-bottom:5px;font-size:13px}
+.tr-tt-row{display:flex;justify-content:space-between;gap:20px;color:#8890b0;margin-top:3px}
+.tr-tt-val{color:#e8e9ed;font-weight:600}
 </style>
 </head>
 <body>
@@ -231,15 +325,88 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
     <div class="tab" onclick="showTab('insights',this)">Insights</div>
   </div>
 
-  <!-- TRACKER VIEW -->
+  <!-- BUDGET OVERVIEW VIEW -->
   <div class="view active" id="tracker">
-    <div class="month-nav" id="monthNav"></div>
-    <div class="cards" id="trackerCards"></div>
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px" id="syncTxnRow"></div>
-    <div id="pendingQueue"></div>
-    <div id="surplusBanner"></div>
-    <div id="trackerSections"></div>
-  </div>
+    <div class="tr-layout">
+
+      <!-- SIDEBAR -->
+      <div class="tr-sidebar">
+        <div class="tr-sb-section">
+          <span class="tr-sb-label">Month</span>
+          <div class="tr-month-sel" id="trMonthSel"></div>
+          <div class="tr-month-chevrons">
+            <button class="tr-mchev" id="trMonthPrev" onclick="trShiftWindow(-1)">&#8249;</button>
+            <button class="tr-mchev" id="trMonthNext" onclick="trShiftWindow(1)">&#8250;</button>
+          </div>
+        </div>
+        <div class="tr-sb-section" style="padding-bottom:0">
+          <span class="tr-sb-label">Sections</span>
+        </div>
+        <div id="trSidebarNav"></div>
+        <div class="tr-sb-footer">
+          <span class="tr-sb-label" style="padding:0;margin-bottom:3px">Budget used</span>
+          <div class="tr-overall-bar" id="trOverallBar"></div>
+          <div id="trOverallPct" style="font-size:11px;font-weight:600;color:#e8e9ed"></div>
+        </div>
+      </div>
+
+      <!-- MAIN -->
+      <div class="tr-main">
+
+        <!-- SUMMARY BAR -->
+        <div class="tr-sum-bar">
+          <div class="tr-sum-item">
+            <div class="tr-sum-label">Income</div>
+            <div class="tr-sum-value" id="trSumIncome" style="color:#4f6ef7"></div>
+          </div>
+          <div class="tr-sum-item">
+            <div class="tr-sum-label">Budgeted</div>
+            <div class="tr-sum-value" id="trSumBudgeted"></div>
+          </div>
+          <div class="tr-sum-item">
+            <div class="tr-sum-label">Spent</div>
+            <div class="tr-sum-value" id="trSumSpent" style="color:#34d47c"></div>
+          </div>
+          <div class="tr-sum-item">
+            <div class="tr-sum-label">Available</div>
+            <div class="tr-sum-value" id="trSumAvailable"></div>
+          </div>
+          <div class="tr-sum-bar-item">
+            <span style="font-size:9px;color:#555878;white-space:nowrap" id="trSumPct"></span>
+            <div class="tr-sum-progress"><div class="tr-sum-fill" id="trSumFill"></div></div>
+          </div>
+          <div class="tr-sum-actions">
+            <div class="sync-info" style="margin-right:4px">
+              <div class="sync-dot" id="syncDot"></div>
+              <span id="syncStatus" style="color:#8e8e93;font-size:11px">Saved</span>
+            </div>
+            <button class="tr-btn-ghost" onclick="openAdd(trackerIdx, budgetPlan[0]?.Category)">+ Add</button>
+            <button class="tr-btn-primary" id="syncTxnBtn" onclick="syncPlaidTransactions()">&#8635; Sync Chase</button>
+          </div>
+        </div>
+
+        <!-- PENDING QUEUE -->
+        <div id="pendingQueue"></div>
+
+        <!-- SANKEY PANEL -->
+        <div class="tr-sankey-panel">
+          <div class="tr-sankey-hdr">
+            <span class="tr-sankey-title" id="trSankeyTitle">💰 Money flow</span>
+            <div class="tr-depth-btns">
+              <button class="tr-dbtn active" onclick="trSetDepth(2,this)">Sections</button>
+              <button class="tr-dbtn" onclick="trSetDepth(3,this)">Categories</button>
+              <button class="tr-dbtn" onclick="trSetDepth(4,this)">Transactions</button>
+            </div>
+          </div>
+          <canvas id="trSankeyCanvas"></canvas>
+        </div>
+
+        <!-- SECTION DETAIL -->
+        <div class="tr-sec-detail" id="trSecDetail"></div>
+
+      </div><!-- end main -->
+    </div><!-- end layout -->
+  </div><!-- end tracker view -->
 
   <!-- MONTHLY VIEW -->
   <div class="view" id="monthly">
@@ -295,6 +462,12 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 
 <!-- DROPDOWN OVERLAY -->
 <div id="ddOverlay" style="display:none;position:fixed;inset:0;z-index:49" onclick="closeAllDropdowns()"></div>
+
+<!-- TRACKER TOOLTIP -->
+<div class="tr-tooltip" id="trTooltip">
+  <div class="tr-tt-title" id="trTtTitle"></div>
+  <div id="trTtBody"></div>
+</div>
 
 <script>
 // ── CONFIG ────────────────────────────────────────────────────────────────────
@@ -645,49 +818,40 @@ function calcAvailable(idx) {
   const total = freed + unallocated - covered;
   return {freed, unallocated, total}; // total can be negative
 }
-// ── MONTH NAV ─────────────────────────────────────────────────────────────────
+// ── MONTH NAV (sidebar version) ───────────────────────────────────────────────
 function renderMonthNav(containerId, activeIdx, showAddBtn) {
+  // Legacy call from monthly tab — keep working
+  const container = document.getElementById(containerId);
+  if (!container) return;
   const total = months.length;
   const canLeft = windowStart > 0;
   const canRight = windowStart + WINDOW_SIZE < total;
   const visible = months.slice(windowStart, windowStart + WINDOW_SIZE);
   const today = new Date();
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  const isTracker = containerId === 'monthNav';
-  const selectFn = isTracker ? 'selectTrackerMonth' : 'selectMonthlyMonth';
-
   const monthBtns = visible.map((mo, i) => {
     const globalIdx = windowStart + i;
     const isPast = mo.year < today.getFullYear() || (mo.year === today.getFullYear() && mo.month < today.getMonth() + 1);
-    return `<button class="month-btn ${globalIdx === activeIdx ? 'active' : ''} ${isPast ? 'past' : ''}" onclick="${selectFn}(${globalIdx})">${mo.label}</button>`;
+    return `<button class="month-btn ${globalIdx === activeIdx ? 'active' : ''} ${isPast ? 'past' : ''}"
+      onclick="selectMonthlyMonth(${globalIdx})">${mo.label}</button>`;
   }).join('');
-
   const addBtn = showAddBtn ? `<button class="add-month-btn" onclick="addNextMonth()">+ Next month</button>` : '';
-
   container.innerHTML =
-    `<button class="month-chevron" ${canLeft ? '' : 'disabled'} onclick="shiftWindow(-1,'${containerId}',${activeIdx})">&#8249;</button>` +
-    `<div class="month-scroll" id="${containerId}Scroll">${monthBtns}${addBtn}</div>` +
-    `<button class="month-chevron" ${canRight ? '' : 'disabled'} onclick="shiftWindow(1,'${containerId}',${activeIdx})">&#8250;</button>`;
+    `<button class="month-chevron" ${canLeft?'':'disabled'} onclick="shiftWindow(-1,'${containerId}',${activeIdx})">&#8249;</button>` +
+    `<div class="month-scroll">${monthBtns}${addBtn}</div>` +
+    `<button class="month-chevron" ${canRight?'':'disabled'} onclick="shiftWindow(1,'${containerId}',${activeIdx})">&#8250;</button>`;
 }
 
 function shiftWindow(dir, containerId, activeIdx) {
   windowStart = Math.max(0, Math.min(windowStart + dir * WINDOW_SIZE, months.length - WINDOW_SIZE));
-  if (containerId === 'monthNav') renderMonthNav('monthNav', activeIdx, true);
-  else renderMonthNav('monthlyNav', activeIdx, false);
+  if (containerId === 'monthlyNav') renderMonthNav('monthlyNav', activeIdx, false);
 }
 
-function selectTrackerMonth(idx) {
-  expandedCats.clear();
-  collapsedSections.clear();
-  closeAllDropdowns();
-  renderTracker(idx);
+function trShiftWindow(dir) {
+  windowStart = Math.max(0, Math.min(windowStart + dir * WINDOW_SIZE, months.length - WINDOW_SIZE));
+  renderTracker(trackerIdx);
 }
 
-function selectMonthlyMonth(idx) {
-  renderMonthly(idx);
-}
+function selectMonthlyMonth(idx) { renderMonthly(idx); }
 
 function addNextMonth() {
   const last = months[months.length - 1];
@@ -701,32 +865,651 @@ function addNextMonth() {
   scheduleSave();
   renderTracker(months.length - 1);
 }
-// ── TRACKER RENDER ────────────────────────────────────────────────────────────
-function toggleSection(secName) {
-  if (collapsedSections.has(secName)) collapsedSections.delete(secName);
-  else collapsedSections.add(secName);
-  renderTracker(trackerIdx);
-}
+// ── TRACKER DASHBOARD STATE ───────────────────────────────────────────────────
+let trActiveSec = null;   // null = overview, number = section index
+let trOpenTxnCat = null;  // which category's txn drawer is open
+let trDepth = 2;          // sankey depth: 2=sections, 3=categories, 4=transactions
+let trSankeyNodes = [], trSankeyLinks = [], trHovered = null;
+let trDragSrc = null;
 
-function toggleCat(cat) {
-  if (expandedCats.has(cat)) expandedCats.delete(cat);
-  else expandedCats.add(cat);
-  renderTracker(trackerIdx);
-}
-
-function markAllComplete(idx, secName) {
+// Build ordered section list from budgetPlan
+function getTrSections() {
+  const map = {};
   budgetPlan.forEach(cat => {
-    if (cat.Section !== secName) return;
-    const budget = getBudget(idx, cat.Category);
-    if (!budget || budget <= 0) return;
-    if (getState(idx, cat.Category).isSpent) return; // already done
-    toggleSpent(idx, cat.Category, budget);
+    const sec = cat.Section || 'Other';
+    if (!map[sec]) map[sec] = {name: sec, color: cat.Color || '#8e8e93', cats: []};
+    map[sec].cats.push(cat);
   });
+  return Object.values(map);
+}
+
+// Value to use for a category in Sankey
+// Fixed = budget amount; Variable = max(actual, budget)
+function trCatVal(cat, idx) {
+  const budget = getBudget(idx, cat.Category);
+  const actual = getActual(idx, cat.Category) || 0;
+  return cat.isFixed ? budget : Math.max(actual, budget);
+}
+
+// ── MAIN RENDER ───────────────────────────────────────────────────────────────
+function renderTracker(idx) {
+  trackerIdx = idx;
+  const income = getIncome(idx).total;
+  const sections = getTrSections();
+
+  // Summary bar
+  let totalBudgeted = 0, totalSpent = 0;
+  sections.forEach(sec => {
+    sec.cats.forEach(cat => {
+      totalBudgeted += getBudget(idx, cat.Category);
+      totalSpent += getActual(idx, cat.Category) || 0;
+    });
+  });
+  const avail = calcAvailable(idx);
+  const pct = income > 0 ? Math.min(Math.round(totalSpent / income * 100), 120) : 0;
+
+  const sumIncome = document.getElementById('trSumIncome');
+  if (sumIncome) sumIncome.textContent = fmt(income);
+  const sumBudgeted = document.getElementById('trSumBudgeted');
+  if (sumBudgeted) sumBudgeted.textContent = fmt(totalBudgeted);
+  const sumSpent = document.getElementById('trSumSpent');
+  if (sumSpent) sumSpent.textContent = fmt(totalSpent);
+  const sumAvail = document.getElementById('trSumAvailable');
+  if (sumAvail) {
+    sumAvail.textContent = (avail.total < 0 ? '-' : '') + fmt(Math.abs(avail.total));
+    sumAvail.style.color = avail.total < 0 ? '#ef476f' : '#f59e3f';
+  }
+  const sumPct = document.getElementById('trSumPct');
+  if (sumPct) sumPct.textContent = pct + '% used';
+  const sumFill = document.getElementById('trSumFill');
+  if (sumFill) sumFill.style.width = Math.min(pct, 100) + '%';
+
+  // Sync btn label
+  const syncBtn = document.getElementById('syncTxnBtn');
+  if (syncBtn && !syncBtn.disabled) syncBtn.textContent = '↺ Sync Chase (' + months[idx].label + ')';
+
+  // Pending queue
+  const pq = document.getElementById('pendingQueue');
+  if (pq) pq.innerHTML = renderPendingQueue();
+
+  // Sankey title
+  const title = document.getElementById('trSankeyTitle');
+  if (title) title.textContent = '💰 Money flow · ' + months[idx].label + (trActiveSec !== null ? ' · ' + sections[trActiveSec]?.name : ' · All sections');
+
+  // Sidebar
+  trBuildSidebar(idx, sections, income, totalSpent);
+
+  // Sankey
+  trDrawSankey(idx, sections);
+
+  // Section detail
+  trBuildDetail(idx, sections);
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+function trBuildSidebar(idx, sections, income, totalSpent) {
+  // Month pills
+  const sel = document.getElementById('trMonthSel');
+  if (sel) {
+    const visible = months.slice(windowStart, windowStart + WINDOW_SIZE);
+    const today = new Date();
+    sel.innerHTML = visible.map((mo, i) => {
+      const gi = windowStart + i;
+      const isPast = mo.year < today.getFullYear() || (mo.year === today.getFullYear() && mo.month < today.getMonth() + 1);
+      return `<div class="tr-msel ${gi === idx ? 'active' : ''} ${isPast ? '' : ''}"
+        onclick="trSelectMonth(${gi})">${mo.label}</div>`;
+    }).join('');
+  }
+
+  // Chevron state
+  const prev = document.getElementById('trMonthPrev');
+  const next = document.getElementById('trMonthNext');
+  if (prev) prev.disabled = windowStart <= 0;
+  if (next) next.disabled = windowStart + WINDOW_SIZE >= months.length;
+
+  // Section nav
+  const nav = document.getElementById('trSidebarNav');
+  if (nav) {
+    nav.innerHTML = sections.map((sec, si) => {
+      const secSpent = sec.cats.reduce((s, cat) => s + (getActual(idx, cat.Category) || 0), 0);
+      const secBudget = sec.cats.reduce((s, cat) => s + getBudget(idx, cat.Category), 0);
+      const pct = secBudget > 0 ? Math.min(Math.round(secSpent / secBudget * 100), 100) : 0;
+      const over = secSpent > secBudget;
+      const done = sec.cats.every(cat => getState(idx, cat.Category).isSpent || getState(idx, cat.Category).isClosed);
+      const sc = done ? '#34d47c' : over ? '#ef476f' : '#555878';
+      const st = done ? '✓' : over ? '!' : pct + '%';
+      return `<div class="tr-sec-nav ${si === trActiveSec ? 'active' : ''}" style="--tc:${sec.color}" onclick="trSelectSec(${si})">
+        <div class="tr-sec-dot" style="background:${sec.color}"></div>
+        <span class="tr-sec-name">${sec.name}</span>
+        <span class="tr-sec-stat" style="color:${sc}">${st}</span>
+      </div>
+      <div class="tr-sec-mini"><div class="tr-sec-mini-fill" style="width:${pct}%;background:${sec.color}"></div></div>`;
+    }).join('');
+  }
+
+  // Overall bar
+  const ob = document.getElementById('trOverallBar');
+  if (ob) ob.innerHTML = sections.map(sec => {
+    const secSpent = sec.cats.reduce((s, cat) => s + (getActual(idx, cat.Category) || 0), 0);
+    return `<div class="tr-overall-seg" style="width:${income > 0 ? (secSpent/income*100).toFixed(1) : 0}%;background:${sec.color}"></div>`;
+  }).join('');
+
+  const op = document.getElementById('trOverallPct');
+  if (op) op.textContent = Math.round(totalSpent / income * 100) + '% · ' + fmt(totalSpent) + ' of ' + fmt(income);
+}
+
+function trSelectMonth(idx) {
+  trActiveSec = null;
+  trOpenTxnCat = null;
   renderTracker(idx);
 }
 
-function markSectionSpent(idx, secName, event) {
-  event.stopPropagation();
+function trSelectSec(si) {
+  if (trActiveSec === si) {
+    // Second click — deselect
+    trActiveSec = null;
+    trOpenTxnCat = null;
+    const title = document.getElementById('trSankeyTitle');
+    if (title) title.textContent = '💰 Money flow · ' + months[trackerIdx].label + ' · All sections';
+  } else {
+    trActiveSec = si;
+    trOpenTxnCat = null;
+    const sections = getTrSections();
+    const title = document.getElementById('trSankeyTitle');
+    if (title) title.textContent = '💰 Money flow · ' + months[trackerIdx].label + ' · ' + (sections[si]?.name || '');
+  }
+  trDrawSankey(trackerIdx, getTrSections());
+  trBuildDetail(trackerIdx, getTrSections());
+  // Rebuild sidebar to update active state
+  const income = getIncome(trackerIdx).total;
+  const sections = getTrSections();
+  const totalSpent = sections.reduce((s, sec) => s + sec.cats.reduce((ss, cat) => ss + (getActual(trackerIdx, cat.Category) || 0), 0), 0);
+  trBuildSidebar(trackerIdx, sections, income, totalSpent);
+}
+
+function trSetDepth(d, btn) {
+  trDepth = d;
+  document.querySelectorAll('.tr-dbtn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  trDrawSankey(trackerIdx, getTrSections());
+}
+
+// ── SANKEY ────────────────────────────────────────────────────────────────────
+function trBuildSankeyData(idx, sections) {
+  trSankeyNodes = []; trSankeyLinks = [];
+  const secList = trActiveSec !== null ? [sections[trActiveSec]] : sections;
+  const totalVal = secList.reduce((s, sec) => s + sec.cats.reduce((ss, cat) => ss + trCatVal(cat, idx), 0), 0);
+  const income = getIncome(idx).total;
+  const incomeVal = trActiveSec !== null ? totalVal : income;
+
+  trSankeyNodes.push({id:'income', label:'Income', value:incomeVal, color:'#4f6ef7', level:0,
+    display: fmt(incomeVal)});
+
+  if (trDepth === 2) {
+    secList.forEach(sec => {
+      const v = sec.cats.reduce((s, cat) => s + trCatVal(cat, idx), 0);
+      if (v <= 0) return;
+      const pct = income > 0 ? Math.round(v / income * 100) : 0;
+      trSankeyNodes.push({id:'s_'+sec.name, label:sec.name, value:v, color:sec.color, level:1,
+        display: fmt(v), pct: pct + '%', sec});
+      trSankeyLinks.push({src:'income', tgt:'s_'+sec.name, value:v, color:sec.color});
+    });
+    if (trActiveSec === null) {
+      const avail = Math.max(0, income - totalVal);
+      if (avail > 0.5) {
+        trSankeyNodes.push({id:'avail', label:'Available', value:avail, color:'#34d47c', level:1,
+          display: fmt(avail), pct: Math.round(avail/income*100)+'%'});
+        trSankeyLinks.push({src:'income', tgt:'avail', value:avail, color:'#34d47c'});
+      }
+    }
+  } else if (trDepth === 3) {
+    secList.forEach(sec => {
+      const sv = sec.cats.reduce((s, cat) => s + trCatVal(cat, idx), 0);
+      if (sv <= 0) return;
+      trSankeyNodes.push({id:'s_'+sec.name, label:sec.name, value:sv, color:sec.color, level:1,
+        display: fmt(sv), pct: Math.round(sv/income*100)+'%', sec});
+      trSankeyLinks.push({src:'income', tgt:'s_'+sec.name, value:sv, color:sec.color});
+      sec.cats.forEach(cat => {
+        const v = trCatVal(cat, idx);
+        if (v <= 0) return;
+        const actual = getActual(idx, cat.Category) || 0;
+        const budget = getBudget(idx, cat.Category);
+        trSankeyNodes.push({id:'c_'+sec.name+'_'+cat.Category, label:cat.Category, value:v,
+          color:sec.color, level:2, display:fmt(v), cat, sec,
+          actual, budget, fixed:cat.isFixed});
+        trSankeyLinks.push({src:'s_'+sec.name, tgt:'c_'+sec.name+'_'+cat.Category, value:v, color:sec.color});
+      });
+    });
+  } else {
+    secList.forEach(sec => {
+      const sv = sec.cats.reduce((s, cat) => s + trCatVal(cat, idx), 0);
+      if (sv <= 0) return;
+      trSankeyNodes.push({id:'s_'+sec.name, label:sec.name, value:sv, color:sec.color, level:1,
+        display:fmt(sv), sec});
+      trSankeyLinks.push({src:'income', tgt:'s_'+sec.name, value:sv, color:sec.color});
+      sec.cats.forEach(cat => {
+        const cv = trCatVal(cat, idx);
+        if (cv <= 0) return;
+        const actual = getActual(idx, cat.Category) || 0;
+        const budget = getBudget(idx, cat.Category);
+        trSankeyNodes.push({id:'c_'+sec.name+'_'+cat.Category, label:cat.Category, value:cv,
+          color:sec.color, level:2, display:fmt(cv), cat, sec, actual, budget, fixed:cat.isFixed});
+        trSankeyLinks.push({src:'s_'+sec.name, tgt:'c_'+sec.name+'_'+cat.Category, value:cv, color:sec.color});
+        const txns = getTxns(idx, cat.Category);
+        txns.forEach((t, ti) => {
+          if (t.amt <= 0) return;
+          trSankeyNodes.push({id:'t_'+sec.name+'_'+cat.Category+'_'+ti, label:t.desc||'Transaction',
+            value:t.amt, color:sec.color, level:3, display:fmt(t.amt), txn:t,
+            pending:t.pending});
+          trSankeyLinks.push({src:'c_'+sec.name+'_'+cat.Category,
+            tgt:'t_'+sec.name+'_'+cat.Category+'_'+ti, value:t.amt, color:sec.color});
+        });
+        const spent = txns.reduce((s, t) => s + (t.amt > 0 ? t.amt : 0), 0);
+        const unspent = Math.max(0, cv - spent);
+        if (unspent > 0.5) {
+          trSankeyNodes.push({id:'u_'+sec.name+'_'+cat.Category, label:'Unspent', value:unspent,
+            color:'#252840', level:3, display:fmt(unspent)});
+          trSankeyLinks.push({src:'c_'+sec.name+'_'+cat.Category,
+            tgt:'u_'+sec.name+'_'+cat.Category, value:unspent, color:'#2a2d40'});
+        }
+      });
+    });
+  }
+}
+
+function trDrawSankey(idx, sections) {
+  trBuildSankeyData(idx, sections);
+  const canvas = document.getElementById('trSankeyCanvas');
+  if (!canvas) return;
+  const wrap = canvas.parentElement;
+  const W = wrap.clientWidth - 40; // account for panel padding
+  if (W <= 0) return;
+
+  const levelCounts = {};
+  trSankeyNodes.forEach(n => { levelCounts[n.level] = (levelCounts[n.level] || 0) + 1; });
+  const maxNodes = Math.max(...Object.values(levelCounts), 1);
+  const H = Math.max(200, Math.min(420, maxNodes * 32 + 60));
+  const levels = trDepth + 1;
+
+  canvas.width  = W * devicePixelRatio;
+  canvas.height = H * devicePixelRatio;
+  canvas.style.width  = W + 'px';
+  canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(devicePixelRatio, devicePixelRatio);
+  ctx.clearRect(0, 0, W, H);
+
+  const NW = 10, GAP = 5;
+  const PAD_L = 110, PAD_R = 180, PAD_T = 14, PAD_B = 14;
+  const innerW = W - PAD_L - PAD_R;
+  const innerH = H - PAD_T - PAD_B;
+
+  // Assign y positions per level
+  for (let lv = 0; lv < levels; lv++) {
+    const lvNodes = trSankeyNodes.filter(n => n.level === lv);
+    if (!lvNodes.length) continue;
+    const total = lvNodes.reduce((s, n) => s + n.value, 0);
+    const totalGaps = GAP * (lvNodes.length - 1);
+    const avail = innerH - totalGaps;
+    let y = PAD_T;
+    lvNodes.forEach(n => {
+      n.h = Math.max(2, (n.value / total) * avail);
+      n.y = y;
+      n.x = PAD_L + (lv / Math.max(levels - 1, 1)) * innerW;
+      y += n.h + GAP;
+    });
+  }
+
+  // Reset draw cursors
+  trSankeyNodes.forEach(n => { n._outY = n.y; n._inY = n.y; });
+
+  // Draw ribbons
+  trSankeyLinks.forEach(link => {
+    const src = trSankeyNodes.find(n => n.id === link.src);
+    const tgt = trSankeyNodes.find(n => n.id === link.tgt);
+    if (!src || !tgt || !src.h || !tgt.h) return;
+
+    const srcH = Math.max(1, (link.value / src.value) * src.h);
+    const tgtH = Math.max(1, (link.value / tgt.value) * tgt.h);
+    const x0 = src.x + NW, y0t = src._outY, y0b = src._outY + srcH;
+    const x1 = tgt.x,      y1t = tgt._inY,  y1b = tgt._inY + tgtH;
+    src._outY += srcH;
+    tgt._inY  += tgtH;
+
+    const isHov = trHovered && (trHovered.id === link.src || trHovered.id === link.tgt);
+    const baseAlpha = trHovered ? (isHov ? 0.5 : 0.04) : 0.2;
+
+    const stripAlpha = n => Math.round(Math.min(n, 1) * 255).toString(16).padStart(2, '0');
+    const srcColor = '#' + link.color.replace('#', '').substring(0, 6);
+    const tgtColor = '#' + (tgt.color || link.color).replace('#', '').substring(0, 6);
+
+    const grad = ctx.createLinearGradient(x0, 0, x1, 0);
+    grad.addColorStop(0, srcColor + stripAlpha(baseAlpha * 1.3));
+    grad.addColorStop(1, tgtColor + stripAlpha(baseAlpha * 0.7));
+
+    const cp = (x1 - x0) * 0.5;
+    ctx.beginPath();
+    ctx.moveTo(x0, y0t);
+    ctx.bezierCurveTo(x0 + cp, y0t, x1 - cp, y1t, x1, y1t);
+    ctx.lineTo(x1, y1b);
+    ctx.bezierCurveTo(x1 - cp, y1b, x0 + cp, y0b, x0, y0b);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  });
+
+  // Draw nodes and labels
+  trSankeyNodes.forEach(n => {
+    if (n.x === undefined || n.h === undefined) return;
+    const isHov = trHovered?.id === n.id;
+    const nodeColor = '#' + n.color.replace('#', '').substring(0, 6);
+    const alpha = trHovered ? (isHov ? 'ff' : '44') : 'cc';
+    ctx.fillStyle = nodeColor + alpha;
+    const r = Math.min(3, NW / 2, n.h / 2);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(n.x, n.y, NW, n.h, r);
+    else ctx.rect(n.x, n.y, NW, n.h);
+    ctx.fill();
+
+    const midY = n.y + n.h / 2;
+    const isFirst = n.level === 0;
+    const isLast  = n.level === levels - 1;
+    const showLabel = n.h >= (isLast ? 8 : 10);
+    const showAmt   = n.h >= (isLast ? 6 : 10);
+
+    ctx.textBaseline = 'middle';
+    if (isFirst) {
+      ctx.textAlign = 'right';
+      if (showLabel) {
+        ctx.font = '500 11px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = '#9698b8';
+        ctx.fillText(n.label, n.x - 8, midY - 7);
+      }
+      if (showAmt) {
+        ctx.font = '700 13px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(n.display, n.x - 8, midY + 7);
+      }
+    } else {
+      ctx.textAlign = 'left';
+      const tx = n.x + NW + 8;
+      const labelSize = isLast ? 10 : 11;
+      if (showLabel) {
+        ctx.font = `${isHov ? 700 : 500} ${labelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+        ctx.fillStyle = isHov ? '#ffffff' : '#9698b8';
+        ctx.fillText(n.label.substring(0, isLast ? 18 : 20), tx, midY - (showAmt ? 6 : 0));
+      }
+      if (showAmt) {
+        ctx.font = `700 ${labelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+        ctx.fillStyle = nodeColor;
+        ctx.fillText(n.display, tx, midY + (showLabel ? 6 : 0));
+      }
+    }
+  });
+}
+
+// ── SANKEY INTERACTION ────────────────────────────────────────────────────────
+function trGetSankeyHit(e) {
+  const canvas = document.getElementById('trSankeyCanvas');
+  if (!canvas) return null;
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  return trSankeyNodes.find(n => n.x !== undefined && mx >= n.x - 2 && mx <= n.x + 14 && my >= n.y && my <= n.y + n.h);
+}
+
+function trInitSankeyEvents() {
+  const canvas = document.getElementById('trSankeyCanvas');
+  if (!canvas || canvas._trEventsAdded) return;
+  canvas._trEventsAdded = true;
+
+  canvas.addEventListener('mousemove', e => {
+    const hit = trGetSankeyHit(e);
+    const tt = document.getElementById('trTooltip');
+    if (!tt) return;
+    if (hit) {
+      if (trHovered?.id !== hit.id) { trHovered = hit; trDrawSankey(trackerIdx, getTrSections()); }
+      tt.style.display = 'block';
+      tt.style.left = Math.min(e.clientX + 14, window.innerWidth - 200) + 'px';
+      tt.style.top  = (e.clientY - 10) + 'px';
+      const ttTitle = document.getElementById('trTtTitle');
+      const ttBody  = document.getElementById('trTtBody');
+      if (ttTitle) { ttTitle.textContent = hit.label; ttTitle.style.color = '#' + hit.color.replace('#','').substring(0,6); }
+      let b = `<div class="tr-tt-row"><span>Amount</span><span class="tr-tt-val">${hit.display}</span></div>`;
+      if (hit.pct) b += `<div class="tr-tt-row"><span>% of income</span><span class="tr-tt-val">${hit.pct}</span></div>`;
+      if (hit.cat) {
+        b += `<div class="tr-tt-row"><span>Budget</span><span class="tr-tt-val">${fmt(hit.budget)}</span></div>`;
+        b += `<div class="tr-tt-row"><span>Actual</span><span class="tr-tt-val">${fmt(hit.actual)}</span></div>`;
+        const v = hit.actual - hit.budget;
+        b += `<div class="tr-tt-row"><span>Variance</span><span class="tr-tt-val" style="color:${v > 0 ? '#ef476f' : '#34d47c'}">${v > 0 ? '+' : '-'}${fmt(Math.abs(v))}</span></div>`;
+        b += `<div class="tr-tt-row"><span>Type</span><span class="tr-tt-val">${hit.fixed ? 'Fixed' : 'Variable'}</span></div>`;
+      }
+      if (hit.txn) b += `<div class="tr-tt-row"><span>Date</span><span class="tr-tt-val">${hit.txn.ts ? new Date(hit.txn.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''}</span></div>`;
+      if (ttBody) ttBody.innerHTML = b;
+    } else {
+      if (trHovered) { trHovered = null; trDrawSankey(trackerIdx, getTrSections()); }
+      tt.style.display = 'none';
+    }
+  });
+
+  canvas.addEventListener('mouseleave', () => {
+    trHovered = null; trDrawSankey(trackerIdx, getTrSections());
+    const tt = document.getElementById('trTooltip');
+    if (tt) tt.style.display = 'none';
+  });
+
+  canvas.addEventListener('click', e => {
+    const hit = trGetSankeyHit(e);
+    if (!hit) return;
+    const sections = getTrSections();
+    if (hit.sec) {
+      const si = sections.indexOf(hit.sec);
+      if (si >= 0) trSelectSec(si);
+    }
+  });
+}
+
+// ── SECTION DETAIL ────────────────────────────────────────────────────────────
+function trBuildDetail(idx, sections) {
+  const detail = document.getElementById('trSecDetail');
+  if (!detail) return;
+
+  if (trActiveSec === null) {
+    detail.innerHTML = `<div style="padding:40px;text-align:center;color:#555878">
+      <div style="font-size:28px;margin-bottom:10px">👆</div>
+      <div style="font-size:14px;font-weight:600;color:#9698b8;margin-bottom:6px">Select a section</div>
+      <div style="font-size:12px;line-height:1.6">Click a section in the sidebar or a node<br>in the Sankey diagram to drill down</div>
+    </div>`;
+    return;
+  }
+
+  const sec = sections[trActiveSec];
+  if (!sec) return;
+
+  const totalBudget = sec.cats.reduce((s, cat) => s + getBudget(idx, cat.Category), 0);
+  const totalSpent  = sec.cats.reduce((s, cat) => s + (getActual(idx, cat.Category) || 0), 0);
+  const v = totalSpent - totalBudget;
+  const over = v > 0;
+  const avail = calcAvailable(idx);
+
+  // Surplus/deficit banner
+  let bannerHtml = '';
+  if (avail.total > 0.005) {
+    bannerHtml = `<div class="tr-surplus">💰 <strong>${fmt(avail.total)}</strong> available surplus</div>`;
+  } else if (avail.total < -0.005) {
+    bannerHtml = `<div class="tr-deficit">⚠️ <strong>${fmt(Math.abs(avail.total))}</strong> over budget</div>`;
+  }
+
+  let html = bannerHtml + `<div class="tr-sec-hdr">
+    <div>
+      <div class="tr-sec-title" style="color:${'#'+sec.color.replace('#','').substring(0,6)}">${sec.name}</div>
+      <div class="tr-sec-sub">${sec.cats.length} categories · ${months[idx].label}</div>
+    </div>
+    <div class="tr-sec-stats">
+      <div class="tr-hs"><div class="tr-hs-val" style="color:#34d47c">${fmt(totalSpent)}</div><div class="tr-hs-lbl">Spent</div></div>
+      <div class="tr-hs"><div class="tr-hs-val">${fmt(totalBudget)}</div><div class="tr-hs-lbl">Budget</div></div>
+      <div class="tr-hs"><div class="tr-hs-val" style="color:${over?'#ef476f':'#34d47c'}">${over?'-':''}${fmt(Math.abs(v))}</div><div class="tr-hs-lbl">${over?'Over':'Saved'}</div></div>
+      <div class="tr-hs"><button class="tr-cc-btn tr-cc-done" style="padding:5px 12px;font-size:11px" onclick="trMarkAllComplete(${idx},'${esc(sec.name)}')">✓ All</button></div>
+    </div>
+  </div><div class="tr-cat-grid">`;
+
+  sec.cats.forEach((cat, ci) => {
+    const budget = getBudget(idx, cat.Category);
+    const actual = getActual(idx, cat.Category) || 0;
+    const st = getState(idx, cat.Category);
+    const sf = isSinking(cat.Category);
+    const sfBal = sf ? getSinkingBalance(cat.Category) : 0;
+    const effectiveBudget = budget + sfBal;
+    const cv = trCatVal(cat, idx);
+    const pct = effectiveBudget > 0 ? Math.min(Math.round(actual / effectiveBudget * 100), 120) : 0;
+    const over2 = actual > effectiveBudget;
+    const varDiff = actual - effectiveBudget;
+    const barColor = over2 ? '#ef476f' : st.isSpent ? '#34d47c' : sec.color;
+    const txns = getTxns(idx, cat.Category);
+    const planBudget = getPlanBudget(idx, cat.Category);
+    const budgetChanged = Math.abs(budget - planBudget) > 0.005;
+    const canCover = over2 && avail.total > 0 && !st.isClosed;
+
+    let cardClass = '';
+    if (st.isClosed) cardClass = 'tr-closed';
+    else if (st.isSpent) cardClass = 'tr-done';
+    else if (over2) cardClass = 'tr-over';
+
+    // Badges
+    let badges = '';
+    if (sf) badges += `<span class="tr-cc-badge" style="background:#1a3a28;color:#34d47c">Sinking</span>`;
+    if (st.isClosed) badges += `<span class="tr-cc-badge" style="background:#1e2235;color:#555878">Closed</span>`;
+    if (cat.isFixed) badges += `<span class="tr-cc-badge" style="background:#1a1e35;color:#555878;border:1px solid #252840">⚡</span>`;
+    if (over2 && !st.isClosed) badges += `<span class="tr-cc-badge" style="background:#3a1212;color:#ef476f">Over</span>`;
+
+    // Sub note for closed sinking funds
+    let subNote = '';
+    if (st.isClosed && !sf && varDiff < -0.005) {
+      subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
+    }
+
+    html += `<div class="tr-cat-card ${cardClass}" onclick="trToggleTxnDrawer(${ci})">
+      <div class="tr-cc-top">
+        <div style="min-width:0;flex:1">
+          <div class="tr-cc-name">${cat.Category}</div>
+          <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''}</div>
+        </div>
+        <div class="tr-cc-badges" onclick="event.stopPropagation()">
+          ${badges}
+          <button class="tr-cc-lock" onclick="event.stopPropagation();${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
+          <div class="menu-wrap">
+            <button class="tr-cc-menu" onclick="event.stopPropagation();toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
+            <div class="dropdown" id="trdd_${esc(cat.Category)}">
+              <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
+              ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
+              <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tr-cc-amt" style="color:${over2?'#ef476f':st.isSpent?'#34d47c':'#e8e9ed'}">${actual > 0 ? fmt(actual) : '—'}</div>
+      <div class="tr-cc-brow">
+        <span>
+          <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:80px;text-align:left"
+            value="${fmt(budget)}"
+            onclick="event.stopPropagation()"
+            onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
+            onkeydown="if(event.key==='Enter')this.blur()">
+        </span>
+        <span>${pct}% used</span>
+      </div>
+      <div class="tr-cc-bar"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
+      <div class="tr-cc-foot" onclick="event.stopPropagation()">
+        <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'}">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
+        <div class="tr-cc-acts">
+          <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
+          ${canCover ? `<button class="tr-cc-btn" style="background:#1a2a10;color:#f59e3f;font-size:10px" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${varDiff.toFixed(2)})">Cover</button>` : ''}
+          <button class="tr-cc-btn tr-cc-done ${st.isSpent?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">${st.isSpent?(cat.isSavings?'Saved ✓':'Spent ✓'):(cat.isSavings?'Save':'Done')}</button>
+        </div>
+      </div>
+      ${subNote}
+    </div>`;
+  });
+
+  html += '</div>';
+
+  // Transaction drawer
+  if (trOpenTxnCat !== null) {
+    const cat = sec.cats[trOpenTxnCat];
+    if (cat) {
+      const txns = getTxns(idx, cat.Category);
+      const st = getState(idx, cat.Category);
+      html += `<div class="tr-txn-drawer open">
+        <div class="tr-txn-hdr">
+          <div class="tr-txn-title" style="color:${'#'+sec.color.replace('#','').substring(0,6)}">${cat.Category} · transactions</div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button onclick="openAdd(${idx},'${esc(cat.Category)}')" class="tr-cc-btn tr-cc-add">+ Add</button>
+            <button onclick="trOpenTxnCat=null;trBuildDetail(${idx},getTrSections())" style="background:none;border:none;color:#555878;cursor:pointer;font-size:14px">✕</button>
+          </div>
+        </div>
+        ${txns.length ? trBuildTxnRows(txns, idx, cat.Category, st.isClosed, sec.color) : '<div style="padding:12px 14px;font-size:12px;color:#555878">No transactions yet</div>'}
+      </div>`;
+    }
+  }
+
+  detail.innerHTML = html;
+
+  // Init sankey events (only once, after canvas is in DOM)
+  trInitSankeyEvents();
+}
+
+function trBuildTxnRows(txns, idx, catName, closed, color) {
+  const manual   = txns.filter(t => !t.id || t.id.length < 16);
+  const imported = txns.filter(t => t.id && t.id.length >= 16);
+  const importedKey = 'imp_' + catName + '_' + idx;
+  const impCollapsed = collapsedSections.has(importedKey);
+
+  const row = (t, realTi) => {
+    const dateStr = t.ts ? new Date(t.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
+    const del  = closed ? '' : `<button class="tr-txn-del" onclick="event.stopPropagation();deleteTxn(${idx},'${esc(catName)}',${realTi})">✕</button>`;
+    const edit = closed ? '' : `<button class="tr-txn-edit" onclick="event.stopPropagation();openEditTxn(${idx},'${esc(catName)}',${realTi})">✏</button>`;
+    const pending = t.pending ? '<span style="font-size:9px;background:#1a1e35;color:#f59e3f;border-radius:4px;padding:1px 4px;margin-left:3px">⏳</span>' : '';
+    const dragAttrs = (!closed && !IS_TOUCH)
+      ? `draggable="true" ondragstart="onTxnDragStart(event,${idx},'${esc(catName)}',${realTi})" ondragend="onTxnDragEnd(event)"`
+      : '';
+    const handle = (!closed && !IS_TOUCH)
+      ? `<span class="tr-drag-handle" title="Drag to move">⠿</span>` : '';
+    return `<div class="tr-txn-row ${t.pending?'tr-txn-pending':''}" ${dragAttrs}>
+      ${handle}
+      <div class="tr-txn-date">${dateStr}</div>
+      <div class="tr-txn-desc">${t.desc||'Transaction'}${pending}</div>
+      <div class="tr-txn-amt" style="color:${t.amt<0?'#34d47c':'#e8e9ed'}">${fmt(t.amt)}</div>
+      ${edit}${del}
+    </div>`;
+  };
+
+  let html = manual.map(t => row(t, txns.indexOf(t))).join('');
+
+  if (imported.length) {
+    html += `<div onclick="event.stopPropagation();toggleImportedTxns('${esc(importedKey)}')"
+      style="display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:#161929;cursor:pointer;border-top:1px solid #252840">
+      <span style="font-size:10px;color:#555878;font-weight:700">IMPORTED (${imported.length})</span>
+      <span style="font-size:10px;color:#555878">${impCollapsed?'›':'⌄'}</span>
+    </div>`;
+    if (!impCollapsed) html += imported.map(t => row(t, txns.indexOf(t))).join('');
+  }
+
+  // Drop zone for drag and drop
+  if (!closed && !IS_TOUCH) {
+    html += `<div class="tr-drop-zone"
+      ondragover="onDropZoneDragOver(event,'${esc(catName)}')"
+      ondragleave="onDropZoneDragLeave(event)"
+      ondrop="onDropZoneDrop(event,'${esc(catName)}',${idx})">Drop here to move</div>`;
+  }
+
+  return html;
+}
+
+function trToggleTxnDrawer(ci) {
+  trOpenTxnCat = trOpenTxnCat === ci ? null : ci;
+  trBuildDetail(trackerIdx, getTrSections());
+}
+
+function trMarkAllComplete(idx, secName) {
   budgetPlan.forEach(cat => {
     if (cat.Section !== secName) return;
     const budget = getBudget(idx, cat.Category);
@@ -737,354 +1520,61 @@ function markSectionSpent(idx, secName, event) {
   renderTracker(idx);
 }
 
-function renderTracker(idx) {
-  trackerIdx = idx;
-  renderMonthNav('monthNav', idx, true);
-
-  const income = getIncome(idx).total;
-  let totalActual = 0;
-  budgetPlan.forEach(cat => {
-    const a = getActual(idx, cat.Category);
-    if (a !== null) totalActual += a;
-  });
-
-  const avail = calcAvailable(idx);
-
-  document.getElementById('trackerCards').innerHTML =
-    `<div class="card"><div class="card-label">Income</div><div class="card-value blue">${fmt(income)}</div></div>` +
-    `<div class="card"><div class="card-label">Spent</div><div class="card-value ${totalActual > 0 ? 'green' : ''}">${fmt(totalActual)}</div></div>` +
-    `<div class="card"><div class="card-label">Available</div><div class="card-value" style="color:${avail.total < 0 ? '#ff3b30' : '#ff9500'}">${avail.total < 0 ? '-' : ''}${fmt(Math.abs(avail.total))}</div></div>`;
-
-  // Sync button
-  const syncRow = document.getElementById('syncTxnRow');
-  if (syncRow) syncRow.innerHTML =
-    `<button id="syncTxnBtn" class="btn-xs btn-add" style="font-size:12px;padding:6px 14px" onclick="syncPlaidTransactions()">&#8635; Sync Chase (${months[idx].label})</button>` +
-    '<span id="syncTxnStatus" style="font-size:12px;color:#8e8e93;margin-left:8px"></span>';
-
-  // Pending queue
-  const pqEl = document.getElementById('pendingQueue');
-  if (pqEl) pqEl.innerHTML = renderPendingQueue();
-
-  // Surplus/deficit banner
-  const sb = document.getElementById('surplusBanner');
-  if (avail.total > 0.005) {
-    sb.innerHTML = `<div class="surplus-banner">💰 <strong>${fmt(avail.total)}</strong> available — ${fmt(avail.freed)} freed from closed categories${avail.unallocated > 0 ? ' · ' + fmt(avail.unallocated) + ' unallocated' : ''}</div>`;
-  } else if (avail.total < -0.005) {
-    sb.innerHTML = `<div class="surplus-banner" style="background:#fff0f0;border-color:#ff3b30;color:#c0392b">⚠️ <strong>${fmt(Math.abs(avail.total))}</strong> over budget — budgeted categories exceed income by this amount</div>`;
-  } else {
-    sb.innerHTML = '';
-  }
-
-  // Group categories by section
-  const sections = {};
-  budgetPlan.forEach(cat => {
-    const sec = cat.Section || 'Other';
-    if (!sections[sec]) sections[sec] = {col: cat.Color || '#8e8e93', items: []};
-    sections[sec].items.push(cat);
-  });
-
-  let html = '';
-  Object.entries(sections).forEach(([secName, {col, items}]) => {
-    let secBudget = 0, secActual = 0;
-    items.forEach(cat => {
-      secBudget += getBudget(idx, cat.Category);
-      const a = getActual(idx, cat.Category);
-      if (a !== null) secActual += a;
-    });
-    const secVar = secActual > 0 ? secActual - secBudget : null;
-    const secCollapsed = collapsedSections.has(secName);
-    const secNonZero = items.filter(c => (getBudget(idx, c.Category) || 0) > 0);
-    const secAllDone = secNonZero.length > 0 && secNonZero.every(c => getState(idx, c.Category).isSpent || getActual(idx, c.Category) === getBudget(idx, c.Category));
-    const secAllSavings = secNonZero.length > 0 && secNonZero.every(c => c.isSavings);
-
-    const secHdrMeta = secCollapsed
-      ? `<span style="color:rgba(255,255,255,0.8);font-size:12px;font-variant-numeric:tabular-nums">${fmt(secActual)} / ${fmt(secBudget)}</span>`
-      : [
-          secAllDone ? '<span style="color:#fff;font-weight:600;font-size:13px">✓</span>' : '',
-          secVar !== null ? `<span style="color:${secVar > 0.005 ? '#ffcccc' : secVar < -0.005 ? '#ccffcc' : 'rgba(255,255,255,0.7)'};font-size:12px;font-weight:600">${fmtSigned(secVar)}</span>` : '',
-          `<span style="font-size:12px;color:rgba(255,255,255,0.8)">${fmt(secBudget)}</span>`,
-        ].join('');
-
-    html += `<div class="section">`;
-    html += `<div class="sec-hdr" style="cursor:pointer;background:${col};border-radius:14px 14px 0 0" onclick="toggleSection('${esc(secName)}')">
-      <div class="sec-title" style="color:#fff;font-size:13px">${secName}</div>
-      <div class="sec-meta">
-        ${secHdrMeta}
-        <button class="btn-xs" style="background:rgba(255,255,255,0.25);color:#fff;padding:3px 9px;font-size:11px;margin-left:6px"
-          onclick="event.stopPropagation();markAllComplete(${idx},'${esc(secName)}')">✓ All</button>
-        <span style="color:rgba(255,255,255,0.8);font-size:14px;margin-left:6px">${secCollapsed ? '›' : '⌄'}</span>
-      </div>
-    </div>`;
-    if (!secCollapsed) items.forEach(cat => { html += renderCatRow(idx, cat); });
-    html += `</div>`;
-  });
-
-  document.getElementById('trackerSections').innerHTML = html;
+// Override drag functions to use tr-drop-zone
+function onDropZoneDrop(e, targetCat, targetIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  if (!trDragSrc || trDragSrc.cat === targetCat) return;
+  const {idx, cat, ti, txn} = trDragSrc;
+  const srcTxns = getTxns(idx, cat);
+  srcTxns.splice(ti, 1);
+  setTxns(idx, cat, srcTxns);
+  const tgtTxns = getTxns(targetIdx, targetCat);
+  tgtTxns.push({...txn, splitGroupId: null});
+  setTxns(targetIdx, targetCat, tgtTxns);
+  trDragSrc = null;
+  renderTracker(idx);
 }
-
-function renderCatRow(idx, cat) {
-  const budget = getBudget(idx, cat.Category);
-  const st = getState(idx, cat.Category);
-  const txns = getTxns(idx, cat.Category);
-  const actual = getActual(idx, cat.Category);
-  const sf = isSinking(cat.Category);
-  const sfBal = sf ? getSinkingBalance(cat.Category) : 0;
-  const effectiveBudget = budget + sfBal;
-  const variance = actual !== null ? actual - effectiveBudget : null;
-  const pct = actual !== null ? Math.min((actual / Math.max(effectiveBudget, 0.01)) * 100, 120) : 0;
-  const barColor = variance === null ? '#d1d1d6' : variance > 0.005 ? '#ff3b30' : '#34c759';
-  const isExpanded = expandedCats.has(cat.Category);
-  const canCover = variance !== null && variance > 0.005 && calcAvailable(idx).total > 0 && !st.isClosed;
-  const planBudget = getPlanBudget(idx, cat.Category);
-  const budgetChanged = Math.abs(budget - planBudget) > 0.005;
-
-  const badges = [
-    sf ? `<span class="flag flag-sf">Sinking${sfBal !== 0 ? (sfBal > 0 ? ' +' + fmt(sfBal) : ' ' + fmt(sfBal)) : ''}</span>` : '',
-    st.isClosed ? '<span class="flag flag-closed">Closed</span>' : '',
-    variance !== null && variance > 0.005 && !st.isClosed ? '<span class="flag flag-over">Over</span>' : '',
-  ].join('');
-
-  const txnCountBadge = txns.length && !isExpanded ? `<span class="txn-count">${txns.length}</span>` : '';
-
-  const catHeader = `<div class="cat-header" onclick="toggleCat('${esc(cat.Category)}')">
-    <span class="cat-chevron ${isExpanded ? 'open' : ''}">▼</span>
-    <span class="cat-name" style="font-weight:700;color:#1c1c1e">${cat.Category}</span>
-    <div class="cat-badges">${badges}${txnCountBadge}</div>
-    <div class="cat-right">
-      <div style="display:flex;align-items:center;gap:3px">
-        <input class="cat-budget-input" value="${fmt(budget)}"
-          onclick="event.stopPropagation()"
-          onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
-          onkeydown="if(event.key==='Enter'){this.blur()}"
-          title="Tap to edit budget">
-        <button style="background:none;border:none;cursor:pointer;font-size:14px;padding:0 2px;line-height:1"
-          onclick="event.stopPropagation();${st.isClosed ? 'reopenCategory' : 'closeCategory'}(${idx},'${esc(cat.Category)}')"
-          title="${st.isClosed ? 'Reopen' : 'Close'} category">${st.isClosed ? '🔒' : '🔓'}</button>
-      </div>
-      ${sf ? `<span style="font-size:11px;color:#34c759;font-variant-numeric:tabular-nums">Bal: ${fmt(effectiveBudget)}</span>` : ''}
-      <span class="cat-actual" style="color:${actual !== null ? (variance !== null && variance > 0.005 ? '#ff3b30' : '#1c1c1e') : '#8e8e93'}">${actual !== null ? fmt(actual) : '—'}</span>
-      <span class="cat-var ${variance !== null && variance > 0.005 ? 'var-over' : variance !== null && variance < -0.005 ? 'var-under' : 'var-exact'}">${fmtSigned(variance)}</span>
-    </div>
-  </div>`;
-
-  const barHtml = actual !== null
-    ? `<div class="cat-bar"><div class="cat-bar-fill" style="width:${Math.min(pct, 100).toFixed(1)}%;background:${barColor}"></div></div>`
-    : '';
-
-  const actionsHtml = `<div class="cat-actions">
-    <div class="cat-actions-left">
-      <button class="btn-xs btn-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
-      ${canCover ? `<button class="btn-xs btn-cover" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${variance.toFixed(2)})">Cover ${fmt(variance)}</button>` : ''}
-    </div>
-    <div class="cat-actions-right">
-      <div class="menu-wrap">
-        <button class="btn-menu" onclick="event.stopPropagation();toggleDropdown('dd_${esc(cat.Category)}')">⋮</button>
-        <div class="dropdown" id="dd_${esc(cat.Category)}">
-          <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')">
-            <span class="dd-icon">${sf ? '✅' : '⬜'}</span> ${sf ? 'Remove sinking fund' : 'Mark as sinking fund'}
-          </div>
-          ${sf && sfBal < 0 ? `<div class="dd-item" onclick="zeroNegativeSinkingCarryover('${esc(cat.Category)}',${idx})"><span class="dd-icon">🔄</span> Zero out negative carryover</div>` : ''}
-          <div class="dd-item" onclick="${st.isClosed ? 'reopenCategory' : 'closeCategory'}(${idx},'${esc(cat.Category)}')">
-            <span class="dd-icon">${st.isClosed ? '🔓' : '🔒'}</span> ${st.isClosed ? 'Reopen category' : 'Close category'}
-          </div>
-          ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span> Reset to plan (${fmt(planBudget)})</div>` : ''}
-        </div>
-      </div>
-      <button class="btn-xs btn-spent ${st.isSpent ? 'done' : ''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">
-        ${cat.isSavings ? (st.isSpent ? 'Saved ✓' : 'Mark Saved') : (st.isSpent ? 'Spent ✓' : 'Mark Spent')}
-      </button>
-    </div>
-  </div>`;
-
-  const txnHtml = isExpanded
-    ? (txns.length
-        ? buildTxnHtml(txns, idx, cat.Category, st.isClosed)
-        : `<div class="txn-list">${!st.isClosed && !IS_TOUCH
-            ? `<div class="cat-drop-zone" style="margin:4px 0"
-                 ondragover="onDropZoneDragOver(event,'${esc(cat.Category)}')"
-                 ondragleave="onDropZoneDragLeave(event)"
-                 ondrop="onDropZoneDrop(event,'${esc(cat.Category)}',${idx})">
-                 <span>Drop here to move transaction</span>
-               </div>`
-            : '<div style="padding:8px 16px;color:#8e8e93;font-size:13px">No transactions yet</div>'}
-        </div>`)
-    : '';
-
-  const subNote = st.isClosed && !sf && variance !== null && variance < -0.005
-    ? `<div class="sub-note good">Freed ${fmt(Math.abs(variance))} to surplus</div>`
-    : sf && st.isClosed && variance !== null && variance !== 0
-    ? `<div class="sub-note ${variance < 0 ? 'good' : 'warn'}">${variance < 0 ? 'Added ' + fmt(Math.abs(variance)) + ' to sinking balance' : 'Drew ' + fmt(variance) + ' from sinking balance'}</div>`
-    : '';
-
-  return `<div class="cat-row ${st.isClosed ? 'closed-row' : ''} ${sf ? 'sinking-row' : ''}">
-    ${catHeader}
-    ${barHtml}
-    ${actionsHtml}
-    <div class="cat-body ${isExpanded ? 'open' : ''}">
-      ${subNote}
-      ${txnHtml}
-    </div>
-  </div>`;
-}
-
-// Detect touch device — disable drag on mobile
-const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-
-// Drag state
-let dragSrc = null; // {idx, cat, ti, txn}
 
 function onTxnDragStart(e, idx, cat, ti) {
-  dragSrc = {idx, cat, ti, txn: getTxns(idx, cat)[ti]};
+  trDragSrc = {idx, cat, ti, txn: getTxns(idx, cat)[ti]};
   e.dataTransfer.effectAllowed = 'move';
-  e.dataTransfer.setData('text/plain', JSON.stringify({idx, cat, ti}));
-  e.currentTarget.style.opacity = '0.4';
+  e.currentTarget.style.opacity = '.4';
   document.body.classList.add('dragging-active');
 }
 
 function onTxnDragEnd(e) {
   e.currentTarget.style.opacity = '1';
-  document.querySelectorAll('.cat-drop-zone').forEach(z => z.classList.remove('drag-over'));
+  document.querySelectorAll('.tr-drop-zone').forEach(z => z.classList.remove('drag-over'));
   document.body.classList.remove('dragging-active');
-  dragSrc = null;
+  trDragSrc = null;
 }
 
 function onDropZoneDragOver(e, targetCat) {
-  if (!dragSrc || dragSrc.cat === targetCat) return;
+  if (!trDragSrc || trDragSrc.cat === targetCat) return;
   e.preventDefault();
-  e.dataTransfer.dropEffect = 'move';
-  document.querySelectorAll('.cat-drop-zone').forEach(z => z.classList.remove('drag-over'));
   e.currentTarget.classList.add('drag-over');
 }
 
-function onDropZoneDragLeave(e) {
-  e.currentTarget.classList.remove('drag-over');
-}
+function onDropZoneDragLeave(e) { e.currentTarget.classList.remove('drag-over'); }
 
-function onDropZoneDrop(e, targetCat, targetIdx) {
-  e.preventDefault();
-  e.currentTarget.classList.remove('drag-over');
-  if (!dragSrc || dragSrc.cat === targetCat) return;
-
-  const {idx, cat, ti, txn} = dragSrc;
-
-  // Remove from source
-  const srcTxns = getTxns(idx, cat);
-  srcTxns.splice(ti, 1);
-  setTxns(idx, cat, srcTxns);
-
-  // Add to target
-  const tgtTxns = getTxns(targetIdx, targetCat);
-  tgtTxns.push({...txn, splitGroupId: null}); // clear split group when moving
-  setTxns(targetIdx, targetCat, tgtTxns);
-
-  expandedCats.add(targetCat);
-  expandedCats.add(cat);
-  dragSrc = null;
-  renderTracker(idx);
-}
-
-function buildTxnHtml(txns, idx, cat, closed) {
-  if (!txns.length) return '';
-
-  // Separate manual vs imported (Plaid) transactions
-  const manual   = txns.filter(t => !t.id || t.id.length < 16);
-  const imported = txns.filter(t => t.id && t.id.length >= 16);
-
-  const importedKey = `imp_${cat}_${idx}`;
-  const impCollapsed = collapsedSections.has(importedKey);
-
-  const txnRow = (t, ti) => {
-    const realTi = txns.indexOf(t);
-    const dateStr = t.ts ? new Date(t.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
-    const del  = closed ? '' : `<button class="txn-del" onclick="event.stopPropagation();deleteTxn(${idx},'${esc(cat)}',${realTi})" title="Delete">&#xD7;</button>`;
-    const edit = closed ? '' : `<button class="txn-del" style="color:#007aff;font-size:13px" onclick="event.stopPropagation();openEditTxn(${idx},'${esc(cat)}',${realTi})" title="Edit">&#9998;</button>`;
-    const dragAttrs = (!closed && !IS_TOUCH)
-      ? `draggable="true"
-         ondragstart="onTxnDragStart(event,${idx},'${esc(cat)}',${realTi})"
-         ondragend="onTxnDragEnd(event)"`
-      : '';
-    const dragHandle = (!closed && !IS_TOUCH)
-      ? `<span style="color:#c7c7cc;font-size:14px;cursor:grab;margin-right:4px;flex-shrink:0" title="Drag to move">&#8942;</span>`
-      : '';
-    return `<div class="txn" ${dragAttrs}>
-      ${dragHandle}
-      <span class="txn-icon" style="flex-shrink:0">${t.splitGroupId ? '⇄' : '$'}</span>
-      <div style="flex:1;min-width:0">
-        <div class="txn-desc" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.desc || 'Transaction'}</div>
-        ${dateStr ? `<div style="font-size:10px;color:#8e8e93">${dateStr}</div>` : ''}
-      </div>
-      <span class="txn-amt" style="color:${t.amt < 0 ? '#34c759' : '#1c1c1e'};white-space:nowrap;margin-left:6px">${fmt(t.amt)}</span>
-      ${edit}${del}
-    </div>`;
-  };
-
-  const manualHtml = manual.map(t => txnRow(t, txns.indexOf(t))).join('');
-
-  let importedHtml = '';
-  if (imported.length) {
-    importedHtml = `
-      <div onclick="event.stopPropagation();toggleImportedTxns('${esc(importedKey)}')"
-        style="display:flex;align-items:center;justify-content:space-between;padding:4px 16px;background:#f9f9f9;cursor:pointer;border-top:1px solid #f2f2f7">
-        <span style="font-size:11px;color:#8e8e93;font-weight:600">IMPORTED (${imported.length})</span>
-        <span style="font-size:11px;color:#8e8e93">${impCollapsed ? '›' : '⌄'}</span>
-      </div>
-      ${impCollapsed ? '' : imported.map(t => txnRow(t, txns.indexOf(t))).join('')}`;
-  }
-
-  // Drop zone — only on desktop
-  const dropZone = !closed && !IS_TOUCH
-    ? `<div class="cat-drop-zone"
-         ondragover="onDropZoneDragOver(event,'${esc(cat)}')"
-         ondragleave="onDropZoneDragLeave(event)"
-         ondrop="onDropZoneDrop(event,'${esc(cat)}',${idx})">
-         <span>Drop here to move transaction</span>
-       </div>`
-    : '';
-
-  return `<div class="txn-list">${manualHtml}${importedHtml}${dropZone}</div>`;
-}
-
+// Legacy functions still used by other parts of app
+function toggleCat(cat) { /* no-op in new UI */ }
+function toggleSection(secName) { /* no-op in new UI */ }
+function markAllComplete(idx, secName, event) { if(event) event.stopPropagation(); trMarkAllComplete(idx, secName); }
+function markSectionSpent(idx, secName, event) { if(event) event.stopPropagation(); trMarkAllComplete(idx, secName); }
 function toggleImportedTxns(key) {
   if (collapsedSections.has(key)) collapsedSections.delete(key);
   else collapsedSections.add(key);
-  renderTracker(trackerIdx);
+  trBuildDetail(trackerIdx, getTrSections());
 }
 
-// ── EDIT TRANSACTION ──────────────────────────────────────────────────────────
-function openEditTxn(idx, cat, ti) {
-  const txns = getTxns(idx, cat);
-  const t = txns[ti];
-  if (!t) return;
-
-  // Reuse the add modal but prefill it
-  modalCtx = {idx, editCat: cat, editTi: ti};
-  document.getElementById('modalAddTitle').textContent = 'Edit transaction';
-  document.getElementById('addDesc').value = t.desc || '';
-  document.getElementById('addRows').innerHTML = '';
-  document.getElementById('addRemaining').style.display = 'none';
-
-  // If it's a split, show all split rows
-  if (t.splitGroupId) {
-    // Find all transactions in this split group across all categories
-    const allSplits = [];
-    budgetPlan.forEach(c => {
-      getTxns(idx, c.Category).forEach((st, sti) => {
-        if (st.splitGroupId === t.splitGroupId) allSplits.push({cat: c.Category, txn: st, ti: sti});
-      });
-    });
-    modalCtx.editSplitGroup = t.splitGroupId;
-    modalCtx.editSplitCats = allSplits.map(s => s.cat);
-    allSplits.forEach(s => addSplitRow(s.cat, s.txn.amt));
-  } else {
-    addSplitRow(cat, t.amt);
+// Resize handler
+window.addEventListener('resize', () => {
+  if (document.getElementById('tracker')?.classList.contains('active')) {
+    trDrawSankey(trackerIdx, getTrSections());
   }
-
-  document.getElementById('modalAdd').classList.add('open');
-  setTimeout(() => {
-    const firstAmt = document.querySelector('#addRows .split-row input[type="number"]');
-    if (firstAmt) firstAmt.focus();
-  }, 100);
-}
+});
 // ── TRACKER ACTIONS ───────────────────────────────────────────────────────────
 function toggleSpent(idx, cat, budget) {
   const st = getState(idx, cat);
@@ -2952,14 +3442,14 @@ function updateSSResults() {
 }
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
 function showTab(id, el) {
-  expandedCats.clear();
-  collapsedSections.clear();
   closeAllDropdowns();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
+  document.body.classList.toggle('tr-active', id === 'tracker');
   if (id === 'projection') buildProjection();
+  if (id === 'tracker') requestAnimationFrame(() => trDrawSankey(trackerIdx, getTrSections()));
 }
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function signIn() {
