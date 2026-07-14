@@ -1992,11 +1992,14 @@ async function syncPlaidTransactions() {
     const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
 
     // Build fingerprints of already-logged transactions to catch posted duplicates
-    // of pending transactions we already confirmed
+    // of pending transactions we already confirmed.
+    // Normalize merchant names since Plaid changes formatting between pending and posted
+    // (e.g. "CENTERPOINT ENERG" pending vs "CenterPoint Energy" posted)
+    const normMerchant = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
     const confirmedFingerprints = new Set();
     budgetPlan.forEach(cat => {
       getTxns(trackerIdx, cat.Category).forEach(t => {
-        confirmedFingerprints.add(`${t.desc}|${Math.abs(t.amt).toFixed(2)}`);
+        confirmedFingerprints.add(`${normMerchant(t.desc)}|${Math.abs(t.amt).toFixed(2)}`);
       });
     });
 
@@ -2007,11 +2010,20 @@ async function syncPlaidTransactions() {
         return (t.pending || (d >= monthStart && d <= monthEnd)) && t.amount > 0;
       })
       .filter(t => {
+        // Layer 1: exact plaid transaction id already confirmed
         if (trackerData.confirmedPlaidIds.has(t.transaction_id)) return false;
-        // Skip posted version if we already confirmed the pending version
+        // Layer 2: posted version of a pending txn we already confirmed —
+        // Plaid links them via pending_transaction_id
+        if (t.pending_transaction_id && trackerData.confirmedPlaidIds.has(t.pending_transaction_id)) {
+          // Remember the posted id too so future syncs skip it via layer 1
+          trackerData.confirmedPlaidIds.add(t.transaction_id);
+          return false;
+        }
+        // Layer 3: normalized merchant+amount fingerprint against everything already logged
         if (!t.pending) {
-          const fp = `${t.merchant_name || t.name}|${t.amount.toFixed(2)}`;
-          if (confirmedFingerprints.has(fp)) return false;
+          const fp1 = `${normMerchant(t.merchant_name)}|${t.amount.toFixed(2)}`;
+          const fp2 = `${normMerchant(t.name)}|${t.amount.toFixed(2)}`;
+          if (confirmedFingerprints.has(fp1) || confirmedFingerprints.has(fp2)) return false;
         }
         return true;
       })
