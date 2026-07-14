@@ -988,6 +988,8 @@ function renderTracker(idx) {
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
 function trBuildSidebar(idx, sections, income, totalSpent) {
+  const totalBudgeted = getBudgetSections().reduce((s, sec) =>
+    s + sec.cats.reduce((ss, cat) => ss + getBudget(idx, cat.Category), 0), 0);
   // Month pills
   const sel = document.getElementById('trMonthSel');
   if (sel) {
