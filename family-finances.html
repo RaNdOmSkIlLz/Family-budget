@@ -1399,8 +1399,7 @@ function trBuildDetail(idx, sections) {
       subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
     }
 
-    html += `<div class="tr-cat-card ${cardClass}">
-      <div onclick="trToggleTxnDrawer(${ci})" style="cursor:pointer">
+    html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}" style="cursor:pointer">
         <div class="tr-cc-top">
           <div style="min-width:0;flex:1">
             <div class="tr-cc-name">${cat.Category}</div>
@@ -1430,8 +1429,7 @@ function trBuildDetail(idx, sections) {
           <span>${pct}% used</span>
         </div>
         <div class="tr-cc-bar"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
-      </div>
-      <div class="tr-cc-foot">
+      <div class="tr-cc-foot" onclick="event.stopPropagation()">
         <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'}">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
         <div class="tr-cc-acts">
           <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
@@ -1465,6 +1463,21 @@ function trBuildDetail(idx, sections) {
   }
 
   detail.innerHTML = html;
+
+  // Delegated click handler — catches clicks on any .tr-cat-card[data-ci]
+  // This avoids issues with special chars in category names in onclick attrs
+  detail.onclick = (e) => {
+    const card = e.target.closest('.tr-cat-card[data-ci]');
+    if (!card) return;
+    // Don't toggle if clicking action buttons, dropdowns, inputs, or badges
+    if (e.target.closest('.tr-cc-foot') ||
+        e.target.closest('.tr-cc-badges') ||
+        e.target.closest('.dropdown') ||
+        e.target.closest('input') ||
+        e.target.closest('button')) return;
+    const ci = parseInt(card.dataset.ci);
+    if (!isNaN(ci)) trToggleTxnDrawer(ci);
+  };
 
   // Init sankey events (only once, after canvas is in DOM)
   trInitSankeyEvents();
