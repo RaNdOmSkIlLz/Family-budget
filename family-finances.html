@@ -179,16 +179,16 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .tr-layout{display:flex;height:calc(100vh - 110px);overflow:hidden;margin:-16px -16px 0;background:#0d1021}
 .tr-sidebar{width:220px;background:#111424;border-right:1px solid #252840;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#252840 transparent}
 .tr-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d1021}
-.tr-sum-bar{display:flex;align-items:center;gap:0;background:#161929;border-bottom:1px solid #252840;height:46px;flex-shrink:0}
-.tr-sum-item{display:flex;flex-direction:column;padding:0 16px;border-right:1px solid #252840;height:100%;justify-content:center}
-.tr-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878;margin-bottom:1px}
-.tr-sum-value{font-size:14px;font-weight:700}
-.tr-sum-bar-item{flex:1;padding:0 16px;display:flex;align-items:center;gap:8px}
-.tr-sum-progress{flex:1;height:4px;background:#252840;border-radius:2px;overflow:hidden}
-.tr-sum-fill{height:100%;background:linear-gradient(90deg,#4f6ef7,#a855f7);border-radius:2px;transition:width .3s}
-.tr-sum-actions{display:flex;gap:6px;padding:0 12px;margin-left:auto;align-items:center}
-.tr-btn-primary{padding:5px 12px;background:#4f6ef7;color:#fff;border:none;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
-.tr-btn-ghost{padding:5px 12px;background:transparent;color:#4f6ef7;border:1px solid #252840;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tr-sum-bar{display:flex;align-items:stretch;background:#161929;border-bottom:1px solid #252840;height:52px;flex-shrink:0}
+.tr-sum-item{display:flex;flex-direction:column;padding:0 18px;border-right:1px solid #252840;justify-content:center;min-width:110px}
+.tr-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#4f5880;margin-bottom:2px}
+.tr-sum-value{font-size:15px;font-weight:800;letter-spacing:-.3px}
+.tr-sum-bar-item{flex:1;padding:0 16px;display:flex;align-items:center;gap:10px;min-width:0}
+.tr-sum-progress{flex:1;height:5px;background:#252840;border-radius:3px;overflow:hidden}
+.tr-sum-fill{height:100%;background:linear-gradient(90deg,#4f6ef7,#a855f7);border-radius:3px;transition:width .3s}
+.tr-sum-actions{display:flex;gap:6px;padding:0 14px;margin-left:auto;align-items:center;flex-shrink:0;border-left:1px solid #252840}
+.tr-btn-primary{padding:6px 14px;background:#4f6ef7;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tr-btn-ghost{padding:6px 14px;background:transparent;color:#7b8fd4;border:1px solid #2a3060;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 /* Sidebar internals */
 .tr-sb-section{padding:10px 14px 4px}
 .tr-sb-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878;display:block;margin-bottom:5px}
@@ -357,11 +357,11 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
         <div class="tr-sum-bar">
           <div class="tr-sum-item">
             <div class="tr-sum-label">Income</div>
-            <div class="tr-sum-value" id="trSumIncome" style="color:#4f6ef7"></div>
+            <div class="tr-sum-value" id="trSumIncome" style="color:#7b9fff"></div>
           </div>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Budgeted</div>
-            <div class="tr-sum-value" id="trSumBudgeted"></div>
+            <div class="tr-sum-value" id="trSumBudgeted" style="color:#c8cadd"></div>
           </div>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Spent</div>
@@ -372,13 +372,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
             <div class="tr-sum-value" id="trSumAvailable"></div>
           </div>
           <div class="tr-sum-bar-item">
-            <span style="font-size:9px;color:#555878;white-space:nowrap" id="trSumPct"></span>
+            <span style="font-size:10px;color:#555878;white-space:nowrap" id="trSumPct"></span>
             <div class="tr-sum-progress"><div class="tr-sum-fill" id="trSumFill"></div></div>
+            <span style="font-size:10px;color:#555878;white-space:nowrap" id="trSumDays"></span>
           </div>
           <div class="tr-sum-actions">
-            <div class="sync-info" style="margin-right:4px">
+            <div class="sync-info">
               <div class="sync-dot" id="syncDot"></div>
-              <span id="syncStatus" style="color:#8e8e93;font-size:11px">Saved</span>
+              <span id="syncStatus" style="color:#555878;font-size:11px">Saved</span>
             </div>
             <button class="tr-btn-ghost" onclick="openAdd(trackerIdx, budgetPlan[0]?.Category)">+ Add</button>
             <button class="tr-btn-primary" id="syncTxnBtn" onclick="syncPlaidTransactions()">&#8635; Sync Chase</button>
@@ -917,12 +918,23 @@ function renderTracker(idx) {
   const sumAvail = document.getElementById('trSumAvailable');
   if (sumAvail) {
     sumAvail.textContent = (avail.total < 0 ? '-' : '') + fmt(Math.abs(avail.total));
-    sumAvail.style.color = avail.total < 0 ? '#ef476f' : '#f59e3f';
+    sumAvail.style.color = avail.total < 0 ? '#ff6b6b' : avail.total < 100 ? '#f59e3f' : '#ffd166';
   }
   const sumPct = document.getElementById('trSumPct');
-  if (sumPct) sumPct.textContent = pct + '% used';
+  if (sumPct) sumPct.textContent = pct + '% spent';
   const sumFill = document.getElementById('trSumFill');
-  if (sumFill) sumFill.style.width = Math.min(pct, 100) + '%';
+  if (sumFill) {
+    sumFill.style.width = Math.min(pct, 100) + '%';
+    sumFill.style.background = pct > 100 ? '#ef476f' : 'linear-gradient(90deg,#4f6ef7,#a855f7)';
+  }
+  const sumDays = document.getElementById('trSumDays');
+  if (sumDays) {
+    const mo = months[idx];
+    const today = new Date();
+    const monthEnd = new Date(mo.year, mo.month, 0);
+    const daysLeft = Math.max(0, Math.ceil((monthEnd - today) / 86400000));
+    sumDays.textContent = daysLeft > 0 ? daysLeft + ' days left' : 'Month complete';
+  }
 
   // Sync btn label
   const syncBtn = document.getElementById('syncTxnBtn');
@@ -1387,38 +1399,39 @@ function trBuildDetail(idx, sections) {
       subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
     }
 
-    html += `<div class="tr-cat-card ${cardClass}" onclick="trToggleTxnDrawer(${ci})">
-      <div class="tr-cc-top">
-        <div style="min-width:0;flex:1">
-          <div class="tr-cc-name">${cat.Category}</div>
-          <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''}</div>
-        </div>
-        <div class="tr-cc-badges" onclick="event.stopPropagation()">
-          ${badges}
-          <button class="tr-cc-lock" onclick="event.stopPropagation();${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
-          <div class="menu-wrap">
-            <button class="tr-cc-menu" onclick="event.stopPropagation();toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
-            <div class="dropdown" id="trdd_${esc(cat.Category)}">
-              <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
-              ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
-              <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
+    html += `<div class="tr-cat-card ${cardClass}">
+      <div onclick="trToggleTxnDrawer(${ci})" style="cursor:pointer">
+        <div class="tr-cc-top">
+          <div style="min-width:0;flex:1">
+            <div class="tr-cc-name">${cat.Category}</div>
+            <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''} ${trOpenTxnCat===ci?'▾':'▸'}</div>
+          </div>
+          <div class="tr-cc-badges" onclick="event.stopPropagation()">
+            ${badges}
+            <button class="tr-cc-lock" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
+            <div class="menu-wrap">
+              <button class="tr-cc-menu" onclick="toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
+              <div class="dropdown" id="trdd_${esc(cat.Category)}">
+                <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
+                ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
+                <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
+              </div>
             </div>
           </div>
         </div>
+        <div class="tr-cc-amt" style="color:${over2?'#ef476f':st.isSpent?'#34d47c':'#e8e9ed'}">${actual > 0 ? fmt(actual) : '—'}</div>
+        <div class="tr-cc-brow">
+          <span onclick="event.stopPropagation()">
+            <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:80px;text-align:left"
+              value="${fmt(budget)}"
+              onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
+              onkeydown="if(event.key==='Enter')this.blur()">
+          </span>
+          <span>${pct}% used</span>
+        </div>
+        <div class="tr-cc-bar"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
       </div>
-      <div class="tr-cc-amt" style="color:${over2?'#ef476f':st.isSpent?'#34d47c':'#e8e9ed'}">${actual > 0 ? fmt(actual) : '—'}</div>
-      <div class="tr-cc-brow">
-        <span>
-          <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:80px;text-align:left"
-            value="${fmt(budget)}"
-            onclick="event.stopPropagation()"
-            onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
-            onkeydown="if(event.key==='Enter')this.blur()">
-        </span>
-        <span>${pct}% used</span>
-      </div>
-      <div class="tr-cc-bar"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
-      <div class="tr-cc-foot" onclick="event.stopPropagation()">
+      <div class="tr-cc-foot">
         <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'}">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
         <div class="tr-cc-acts">
           <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
@@ -1507,6 +1520,13 @@ function trBuildTxnRows(txns, idx, catName, closed, color) {
 function trToggleTxnDrawer(ci) {
   trOpenTxnCat = trOpenTxnCat === ci ? null : ci;
   trBuildDetail(trackerIdx, getTrSections());
+  // Scroll drawer into view
+  if (trOpenTxnCat !== null) {
+    setTimeout(() => {
+      const drawer = document.querySelector('.tr-txn-drawer.open');
+      if (drawer) drawer.scrollIntoView({behavior:'smooth', block:'nearest'});
+    }, 50);
+  }
 }
 
 function trMarkAllComplete(idx, secName) {
