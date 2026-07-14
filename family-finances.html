@@ -3698,14 +3698,13 @@ async function initApp() {
     document.getElementById('mainApp').style.display = 'block';
     const startIdx = detectCurrentMonthIdx();
     windowStart = Math.max(0, startIdx - 2);
-    renderTracker(startIdx);
-    renderMonthly(startIdx);
-    renderSnapshot();
-    renderWindfall();
-    renderRetirement();
-    renderGoals();
-    await loadInsights();
-    renderInsights();
+    try { renderTracker(startIdx); } catch(e) { console.error('renderTracker error:', e); }
+    try { renderMonthly(startIdx); } catch(e) { console.error('renderMonthly error:', e); }
+    try { renderSnapshot(); } catch(e) { console.error('renderSnapshot error:', e); }
+    try { renderWindfall(); } catch(e) { console.error('renderWindfall error:', e); }
+    try { renderRetirement(); } catch(e) { console.error('renderRetirement error:', e); }
+    try { renderGoals(); } catch(e) { console.error('renderGoals error:', e); }
+    try { await loadInsights(); renderInsights(); } catch(e) { console.error('renderInsights error:', e); }
   } catch (e) {
     console.error('initApp error:', e);
     setLoadingError(e.message || 'Unknown error — check browser console (F12)');
