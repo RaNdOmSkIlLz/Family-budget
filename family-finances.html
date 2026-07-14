@@ -1681,11 +1681,16 @@ function reopenCategory(idx, cat) {
 
 function coverFromSurplus(idx, cat, overage) {
   closeAllDropdowns();
-  const cover = Math.min(Math.abs(overage), calcAvailable(idx).total);
-  const txns = getTxns(idx, cat);
-  txns.push({id: uid(), desc: 'Covered from surplus', amt: -cover, ts: new Date().toISOString(), splitGroupId: null});
-  setTxns(idx, cat, txns);
-  expandedCats.add(cat);
+  const cover = Math.min(Math.abs(overage), Math.max(0, calcAvailable(idx).total));
+  if (cover <= 0) return;
+  // Increase this month's budget for the category by the covered amount.
+  // Spent stays unchanged; available drops automatically since
+  // available = income - total budgets.
+  const k = mk(idx);
+  if (!trackerBudgets[k]) trackerBudgets[k] = {};
+  const currentBudget = getBudget(idx, cat);
+  trackerBudgets[k][cat] = parseFloat((currentBudget + cover).toFixed(2));
+  scheduleSave();
   renderTracker(idx);
 }
 
