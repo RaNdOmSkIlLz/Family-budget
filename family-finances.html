@@ -26,7 +26,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .tab.active{background:#007aff;border-color:#007aff;color:#fff}
 .view{display:none}.view.active{display:block}
 #tracker{position:relative}
-#tracker.active{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;bottom:0;z-index:5;padding:0;margin:0;overflow:hidden}
+#tracker.active{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0;margin:0;overflow:hidden}
 /* AUTH */
 #authScreen{text-align:center;padding:40px 20px}
 #authScreen h2{font-size:20px;font-weight:600;margin-bottom:12px}
@@ -3593,8 +3593,15 @@ function showTab(id, el) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
+  if (id === 'tracker') {
+    // Position tracker below the header + tabs
+    const tracker = document.getElementById('tracker');
+    const tabsEl = document.querySelector('.tabs');
+    const top = tabsEl ? tabsEl.getBoundingClientRect().bottom : 96;
+    tracker.style.top = Math.round(top) + 'px';
+    requestAnimationFrame(() => trDrawSankey(trackerIdx, getTrSections()));
+  }
   if (id === 'projection') buildProjection();
-  if (id === 'tracker') requestAnimationFrame(() => trDrawSankey(trackerIdx, getTrSections()));
 }
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 function signIn() {
