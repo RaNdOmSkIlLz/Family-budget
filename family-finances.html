@@ -234,6 +234,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .tr-cat-card.tr-done{border-color:#1a3a28;background:#111e18}
 .tr-cat-card.tr-over{border-color:#3a1a1a;background:#1e1111}
 .tr-cat-card.tr-closed{border-color:#1e2235;background:#13151e;opacity:.75}
+.tr-cc-foot{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .tr-cc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:6px}
 .tr-cc-name{font-size:13px;font-weight:600;color:#e8e9ed;margin-bottom:1px}
 .tr-cc-sub{font-size:10px;color:#555878}
@@ -1417,43 +1418,41 @@ function trBuildDetail(idx, sections) {
       subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
     }
 
-    html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}" style="cursor:pointer">
-        <div class="tr-cc-top">
-          <div style="min-width:0;flex:1">
-            <div class="tr-cc-name">${cat.Category}</div>
-            <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''} ${trOpenTxnCat===ci?'▾':'▸'}</div>
-          </div>
-          <div class="tr-cc-badges" onclick="event.stopPropagation()">
-            ${badges}
-            <button class="tr-cc-lock" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
-            <div class="menu-wrap">
-              <button class="tr-cc-menu" onclick="toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
-              <div class="dropdown" id="trdd_${esc(cat.Category)}">
-                <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
-                ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
-                <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
-              </div>
+    html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}">
+      <div class="tr-cc-top">
+        <div style="min-width:0;flex:1;pointer-events:none">
+          <div class="tr-cc-name">${cat.Category}</div>
+          <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''} ${trOpenTxnCat===ci?'▾':'▸'}</div>
+        </div>
+        <div class="tr-cc-badges">
+          ${badges}
+          <button class="tr-cc-lock" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
+          <div class="menu-wrap">
+            <button class="tr-cc-menu" onclick="toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
+            <div class="dropdown" id="trdd_${esc(cat.Category)}">
+              <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
+              ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
+              <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
             </div>
           </div>
         </div>
-        <div class="tr-cc-amt" style="color:${over2?'#ef476f':st.isSpent?'#34d47c':'#e8e9ed'}">${actual > 0 ? fmt(actual) : '—'}</div>
-        <div class="tr-cc-brow">
-          <span onclick="event.stopPropagation()">
-            <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:80px;text-align:left"
-              value="${fmt(budget)}"
-              onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
-              onkeydown="if(event.key==='Enter')this.blur()">
-          </span>
-          <span>${pct}% used</span>
-        </div>
-        <div class="tr-cc-bar"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
-      <div class="tr-cc-foot" onclick="event.stopPropagation()">
-        <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'}">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
-        <div class="tr-cc-acts">
-          <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
-          ${canCover ? `<button class="tr-cc-btn" style="background:#1a2a10;color:#f59e3f;font-size:10px" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${varDiff.toFixed(2)})">Cover</button>` : ''}
-          <button class="tr-cc-btn tr-cc-done ${st.isSpent?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">${st.isSpent?(cat.isSavings?'Saved ✓':'Spent ✓'):(cat.isSavings?'Save':'Done')}</button>
-        </div>
+      </div>
+      <div class="tr-cc-amt" style="color:${over2?'#ef476f':st.isSpent?'#34d47c':'#e8e9ed'};pointer-events:none">${actual > 0 ? fmt(actual) : '—'}</div>
+      <div class="tr-cc-brow" style="pointer-events:none">
+        <span>${fmt(budget)} budget</span>
+        <span>${pct}% used</span>
+      </div>
+      <div class="tr-cc-bar" style="pointer-events:none"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
+      <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'};font-size:11px;font-weight:600;margin-bottom:8px;pointer-events:none">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
+      <div class="tr-cc-foot">
+        <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
+        ${canCover ? `<button class="tr-cc-btn" style="background:#1a2a10;color:#f59e3f;font-size:10px" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${varDiff.toFixed(2)})">Cover</button>` : ''}
+        <button class="tr-cc-btn tr-cc-done ${st.isSpent?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">${st.isSpent?(cat.isSavings?'Saved ✓':'Spent ✓'):(cat.isSavings?'Save':'Done')}</button>
+        <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:72px;text-align:right;margin-left:auto"
+          value="${fmt(budget)}"
+          onclick="event.stopPropagation()"
+          onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
+          onkeydown="if(event.key==='Enter')this.blur()">
       </div>
       ${subNote}
     </div>`;
@@ -1482,22 +1481,20 @@ function trBuildDetail(idx, sections) {
 
   detail.innerHTML = html;
 
-  // Delegated click handler — catches clicks on any .tr-cat-card[data-ci]
-  // This avoids issues with special chars in category names in onclick attrs
+  // Delegated click on the detail container
+  // Non-interactive card areas use pointer-events:none so only buttons/inputs reach here
   detail.onclick = (e) => {
+    // If a button or input was clicked, don't toggle the drawer
+    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.dropdown')) return;
     const card = e.target.closest('.tr-cat-card[data-ci]');
     if (!card) return;
-    // Don't toggle if clicking action buttons, dropdowns, inputs, or badges
-    if (e.target.closest('.tr-cc-foot') ||
-        e.target.closest('.tr-cc-badges') ||
-        e.target.closest('.dropdown') ||
-        e.target.closest('input') ||
-        e.target.closest('button')) return;
     const ci = parseInt(card.dataset.ci);
-    if (!isNaN(ci)) trToggleTxnDrawer(ci);
+    if (!isNaN(ci)) {
+      trToggleTxnDrawer(ci);
+    }
   };
 
-  // Init sankey events (only once, after canvas is in DOM)
+  // Init sankey events
   trInitSankeyEvents();
 }
 
