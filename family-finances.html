@@ -270,17 +270,30 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 /* Surplus/deficit banner */
 .tr-surplus{background:#1a2a10;border-left:3px solid #34d47c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#34d47c}
 .tr-deficit{background:#2a1010;border-left:3px solid #ef476f;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#ef476f}
-/* Drag */
+/* PROJECTION TABLE */
+.proj-table{background:#fff;border-radius:14px;overflow:hidden;margin-bottom:14px}
+.proj-row{display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;padding:10px 12px;border-bottom:1px solid #f2f2f7;align-items:center}
+.proj-row:last-child{border-bottom:none}
+.proj-row.hdr{background:#f9f9f9;font-size:10px;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.04em}
+.proj-row.raise{background:#f0fff4}
+.proj-month{font-size:13px;font-weight:500}
+.proj-income,.proj-exp,.proj-sav{font-size:13px;font-variant-numeric:tabular-nums}
+.proj-rem{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
+
+/* DRAG AND DROP */
+.cat-drop-zone{display:none;padding:6px 16px;margin:2px 8px;border:2px dashed #d1d1d6;border-radius:8px;text-align:center;font-size:11px;color:#c7c7cc;transition:all .15s}
+.dragging-active .cat-drop-zone{display:block}
+.cat-drop-zone.drag-over{border-color:#007aff;background:#e8f4ff;color:#007aff}
+[draggable=true]{cursor:grab}
+[draggable=true]:active{cursor:grabbing}
+
+/* TRACKER DRAG & TOOLTIP */
 .tr-drag-handle{color:#555878;font-size:12px;cursor:grab;margin-right:4px;flex-shrink:0}
 .tr-drop-zone{display:none;padding:5px 14px;margin:2px 0;border:1px dashed #252840;border-radius:6px;text-align:center;font-size:10px;color:#555878}
 .dragging-active .tr-drop-zone{display:block}
 .tr-drop-zone.drag-over{border-color:#4f6ef7;background:#1a1e35;color:#4f6ef7}
-/* Pending queue in dark theme */
 .tr-pending-wrap{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px}
 .tr-pending-hdr{padding:8px 14px;border-bottom:1px solid #252840;background:#161929;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
-/* Sync status in dark */
-.tr-sync-wrap{display:flex;align-items:center;gap:8px;padding:6px 0;margin-bottom:6px}
-/* Tooltip */
 .tr-tooltip{position:fixed;background:#1e2240;border:1px solid #353860;border-radius:10px;padding:10px 14px;font-size:12px;pointer-events:none;display:none;z-index:300;min-width:160px}
 .tr-tt-title{font-weight:700;color:#fff;margin-bottom:5px;font-size:13px}
 .tr-tt-row{display:flex;justify-content:space-between;gap:20px;color:#8890b0;margin-top:3px}
@@ -818,23 +831,13 @@ function getActual(idx, cat) {
 
 function calcAvailable(idx) {
   const income = getIncome(idx).total;
-  let totalBudget = 0, freed = 0, covered = 0;
+  let totalBudget = 0;
   budgetPlan.forEach(cat => {
-    if (isExcludedSection(cat.Section)) return; // skip excluded
-    const budget = getBudget(idx, cat.Category);
-    totalBudget += budget;
-    const st = getState(idx, cat.Category);
-    if (st.isClosed && !isSinking(cat.Category)) {
-      const actual = getActual(idx, cat.Category) || 0;
-      if (actual < budget) freed += budget - actual;
-    }
-    getTxns(idx, cat.Category).forEach(t => {
-      if (t.desc === 'Covered from surplus' && t.amt < 0) covered += Math.abs(t.amt);
-    });
+    if (isExcludedSection(cat.Section)) return;
+    totalBudget += getBudget(idx, cat.Category);
   });
-  const unallocated = income - totalBudget;
-  const total = freed + unallocated - covered;
-  return {freed, unallocated, total};
+  const total = income - totalBudget;
+  return {freed: 0, unallocated: total, total};
 }
 // ── MONTH NAV (sidebar version) ───────────────────────────────────────────────
 function renderMonthNav(containerId, activeIdx, showAddBtn) {
@@ -1024,14 +1027,14 @@ function trBuildSidebar(idx, sections, income, totalSpent) {
   }
 
   // Overall bar
-  const ob = document.getElementById('trOverallBar');
-  if (ob) ob.innerHTML = sections.map(sec => {
-    const secSpent = sec.cats.reduce((s, cat) => s + (getActual(idx, cat.Category) || 0), 0);
-    return `<div class="tr-overall-seg" style="width:${income > 0 ? (secSpent/income*100).toFixed(1) : 0}%;background:${sec.color}"></div>`;
-  }).join('');
-
   const op = document.getElementById('trOverallPct');
-  if (op) op.textContent = Math.round(totalSpent / income * 100) + '% · ' + fmt(totalSpent) + ' of ' + fmt(income);
+  if (op) op.textContent = Math.round(totalBudgeted / income * 100) + '% budgeted · ' + fmt(totalBudgeted) + ' of ' + fmt(income);
+
+  const ob = document.getElementById('trOverallBar');
+  if (ob) ob.innerHTML = sections.filter(s => !s.excluded).map(sec => {
+    const secBudget = sec.cats.reduce((s, cat) => s + getBudget(idx, cat.Category), 0);
+    return `<div class="tr-overall-seg" style="width:${income > 0 ? (secBudget/income*100).toFixed(1) : 0}%;background:${sec.color}"></div>`;
+  }).join('');
 }
 
 function trSelectMonth(idx) {
@@ -1394,6 +1397,7 @@ function trBuildDetail(idx, sections) {
     const budget = getBudget(idx, cat.Category);
     const actual = getActual(idx, cat.Category) || 0;
     const st = getState(idx, cat.Category);
+    const lockedAmt = st.isClosed ? budget : budget; // budget already locked by closeCategory
     const sf = isSinking(cat.Category);
     const sfBal = sf ? getSinkingBalance(cat.Category) : 0;
     const effectiveBudget = budget + sfBal;
@@ -1419,10 +1423,14 @@ function trBuildDetail(idx, sections) {
     if (cat.isFixed) badges += `<span class="tr-cc-badge" style="background:#1a1e35;color:#555878;border:1px solid #252840">⚡</span>`;
     if (over2 && !st.isClosed) badges += `<span class="tr-cc-badge" style="background:#3a1212;color:#ef476f">Over</span>`;
 
-    // Sub note for closed sinking funds
+    // Sub note for closed categories that freed up budget
     let subNote = '';
-    if (st.isClosed && !sf && varDiff < -0.005) {
-      subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
+    if (st.isClosed) {
+      const planBgt = st.preCloseBudget || getPlanBudget(idx, cat.Category);
+      const freed = planBgt - lockedAmt;
+      if (freed > 0.5) {
+        subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">🔒 Freed ${fmt(freed)} back to available</div>`;
+      }
     }
 
     html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}" onclick="trHandleCardClick(event,this)">
@@ -1658,24 +1666,43 @@ function toggleSinking(idx, cat) {
 
 function closeCategory(idx, cat) {
   closeAllDropdowns();
-  setState(idx, cat, {isClosed: true});
+  const budget = getBudget(idx, cat);
+  const actual = getActual(idx, cat) || 0;
+  const lockedAmt = parseFloat(Math.max(0, actual).toFixed(2));
+
+  // Lock this month's budget to what was actually spent
+  const k = mk(idx);
+  if (!trackerBudgets[k]) trackerBudgets[k] = {};
+  trackerBudgets[k][cat] = lockedAmt;
+
+  setState(idx, cat, {isClosed: true, preCloseBudget: budget});
+
   if (isSinking(cat)) {
-    const budget = getBudget(idx, cat);
-    const actual = getActual(idx, cat) || 0;
     updateSinkingRunningBalance(cat, budget - actual);
   }
+  scheduleSave();
   renderTracker(idx);
 }
 
 function reopenCategory(idx, cat) {
   closeAllDropdowns();
-  const wasClosed = getState(idx, cat).isClosed;
-  setState(idx, cat, {isClosed: false});
-  if (wasClosed && isSinking(cat)) {
-    const budget = getBudget(idx, cat);
-    const actual = getActual(idx, cat) || 0;
-    updateSinkingRunningBalance(cat, -(budget - actual));
+  const st = getState(idx, cat);
+  const wasClosed = st.isClosed;
+
+  // Restore the pre-close budget if we have it, otherwise use plan budget
+  if (wasClosed) {
+    const k = mk(idx);
+    const restoreTo = st.preCloseBudget || getPlanBudget(idx, cat);
+    if (!trackerBudgets[k]) trackerBudgets[k] = {};
+    trackerBudgets[k][cat] = restoreTo;
+    if (isSinking(cat)) {
+      const actual = getActual(idx, cat) || 0;
+      updateSinkingRunningBalance(cat, -(restoreTo - actual));
+    }
   }
+
+  setState(idx, cat, {isClosed: false, preCloseBudget: undefined});
+  scheduleSave();
   renderTracker(idx);
 }
 
