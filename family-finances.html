@@ -1421,13 +1421,13 @@ function trBuildDetail(idx, sections) {
       subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">Freed ${fmt(Math.abs(varDiff))}</div>`;
     }
 
-    html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}">
+    html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}" onclick="trHandleCardClick(event,this)">
       <div class="tr-cc-top">
         <div style="min-width:0;flex:1;pointer-events:none">
           <div class="tr-cc-name">${cat.Category}</div>
           <div class="tr-cc-sub">${cat.isFixed?'Fixed':'Variable'} · ${txns.length} txn${txns.length!==1?'s':''} ${trOpenTxnCat===ci?'▾':'▸'}</div>
         </div>
-        <div class="tr-cc-badges">
+        <div class="tr-cc-badges" onclick="event.stopPropagation()">
           ${badges}
           <button class="tr-cc-lock" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')" title="${st.isClosed?'Reopen':'Close'}">${st.isClosed?'🔒':'🔓'}</button>
           <div class="menu-wrap">
@@ -1447,7 +1447,7 @@ function trBuildDetail(idx, sections) {
       </div>
       <div class="tr-cc-bar" style="pointer-events:none"><div class="tr-cc-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>
       <div class="tr-cc-var" style="color:${Math.abs(varDiff)<0.5?'#555878':over2?'#ef476f':'#34d47c'};font-size:11px;font-weight:600;margin-bottom:8px;pointer-events:none">${Math.abs(varDiff)<0.5?'On budget':(over2?'+':'-')+fmt(Math.abs(varDiff))}</div>
-      <div class="tr-cc-foot">
+      <div class="tr-cc-foot" onclick="event.stopPropagation()">
         <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
         ${canCover ? `<button class="tr-cc-btn" style="background:#1a2a10;color:#f59e3f;font-size:10px" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${varDiff.toFixed(2)})">Cover</button>` : ''}
         <button class="tr-cc-btn tr-cc-done ${st.isSpent?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">${st.isSpent?(cat.isSavings?'Saved ✓':'Spent ✓'):(cat.isSavings?'Save':'Done')}</button>
@@ -1483,22 +1483,18 @@ function trBuildDetail(idx, sections) {
   }
 
   detail.innerHTML = html;
-
-  // Delegated click on the detail container
-  // Non-interactive card areas use pointer-events:none so only buttons/inputs reach here
-  detail.onclick = (e) => {
-    // If a button or input was clicked, don't toggle the drawer
-    if (e.target.closest('button') || e.target.closest('input') || e.target.closest('.dropdown')) return;
-    const card = e.target.closest('.tr-cat-card[data-ci]');
-    if (!card) return;
-    const ci = parseInt(card.dataset.ci);
-    if (!isNaN(ci)) {
-      trToggleTxnDrawer(ci);
-    }
-  };
-
-  // Init sankey events
   trInitSankeyEvents();
+}
+
+// Called directly from card onclick — cleaner than event delegation
+function trHandleCardClick(e, card) {
+  // Ignore clicks on any button, input, or dropdown item
+  if (e.target.closest('button') ||
+      e.target.closest('input') ||
+      e.target.closest('.dropdown') ||
+      e.target.closest('.dd-item')) return;
+  const ci = parseInt(card.dataset.ci);
+  if (!isNaN(ci)) trToggleTxnDrawer(ci);
 }
 
 function trBuildTxnRows(txns, idx, catName, closed, color) {
