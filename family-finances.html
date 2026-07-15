@@ -2016,7 +2016,7 @@ async function syncPlaidTransactions() {
     const mo = months[trackerIdx];
     const startDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-01`;
     const lastDay = new Date(mo.year, mo.month, 0).getDate();
-    const endDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-${String(lastDay).padStart(2,'0')}`;
+    const endDate = `${mo.year}-${String(mo.month).padStart(2,'0')}-${String(lastDay).padStart(2,'00')}`;
 
     const r = await fetch(`${PLAID_SERVER}/api/get-transactions?start=${startDate}&end=${endDate}`);
     const {transactions, error} = await r.json();
@@ -2025,10 +2025,6 @@ async function syncPlaidTransactions() {
     const monthStart = new Date(mo.year, mo.month - 1, 1);
     const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
 
-    // Build fingerprints of already-logged transactions to catch posted duplicates
-    // of pending transactions we already confirmed.
-    // Normalize merchant names since Plaid changes formatting between pending and posted
-    // (e.g. "CENTERPOINT ENERG" pending vs "CenterPoint Energy" posted)
     const normMerchant = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
     const confirmedFingerprints = new Set();
     budgetPlan.forEach(cat => {
@@ -2039,21 +2035,15 @@ async function syncPlaidTransactions() {
 
     pendingTxns = (transactions || [])
       .filter(t => {
-        // Pending txns show today's date — include them regardless of date
         const d = new Date(t.date + 'T12:00:00');
         return (t.pending || (d >= monthStart && d <= monthEnd)) && t.amount > 0;
       })
       .filter(t => {
-        // Layer 1: exact plaid transaction id already confirmed
         if (trackerData.confirmedPlaidIds.has(t.transaction_id)) return false;
-        // Layer 2: posted version of a pending txn we already confirmed —
-        // Plaid links them via pending_transaction_id
         if (t.pending_transaction_id && trackerData.confirmedPlaidIds.has(t.pending_transaction_id)) {
-          // Remember the posted id too so future syncs skip it via layer 1
           trackerData.confirmedPlaidIds.add(t.transaction_id);
           return false;
         }
-        // Layer 3: normalized merchant+amount fingerprint against everything already logged
         if (!t.pending) {
           const fp1 = `${normMerchant(t.merchant_name)}|${t.amount.toFixed(2)}`;
           const fp2 = `${normMerchant(t.name)}|${t.amount.toFixed(2)}`;
@@ -2071,7 +2061,12 @@ async function syncPlaidTransactions() {
         plaidCategory: t.personal_finance_category?.primary || t.category?.[0] || '',
         suggestedCat:  guessCategoryFromMerchant(t.name) || guessCategoryFromMerchant(t.merchant_name),
         splits:        null,
+        amazonItems:   null, // populated if matched to AmazonOrders
+        amazonMode:    false,
       }));
+
+    // Try to match Amazon transactions to parsed order items
+    await matchAmazonOrders(trackerIdx);
 
     const pendingCount = pendingTxns.filter(t => t.pending).length;
     const postedCount  = pendingTxns.filter(t => !t.pending).length;
@@ -2093,27 +2088,431 @@ async function syncPlaidTransactions() {
   }
 }
 
+// ── AMAZON ORDER MATCHING ──────────────────────────────────────────────────────
+async function matchAmazonOrders(idx) {
+  try {
+    // Load AmazonOrders from sheet
+    const rows = await readSheet(BUDGET_SHEET_ID, 'AmazonOrders!A:K');
+    if (!rows || rows.length < 2) return;
+    const headers = rows[0];
+    const data = rows.slice(1);
+
+    // Group rows by OrderNumber
+    const orderMap = {};
+    data.forEach(row => {
+      const orderNum   = row[0];
+      const orderDate  = row[1];
+      const emailType  = row[2];
+      const plaidTxnId = row[3];
+      const itemName   = row[4];
+      const listPrice  = parseFloat(row[5]) || 0;
+      const taxShare   = parseFloat(row[6]) || 0;
+      const totalPrice = parseFloat(row[7]) || 0;
+      const category   = row[8];
+      const status     = row[9];
+      const mismatch   = row[10];
+
+      if (!orderNum || emailType !== 'order') return;
+      if (status === 'categorized' || status === 'fully_returned' || status === 'returned') return;
+
+      if (!orderMap[orderNum]) {
+        orderMap[orderNum] = {
+          orderNumber: orderNum,
+          orderDate,
+          plaidTxnId,
+          total: 0,
+          items: [],
+        };
+      }
+      orderMap[orderNum].items.push({
+        name: itemName,
+        listPrice,
+        taxShare,
+        totalPrice: totalPrice || listPrice,
+        category: category || '',
+        status: status || 'pending',
+        rowIdx: rows.indexOf(row) + 1, // 1-indexed for sheet writes
+      });
+      orderMap[orderNum].total += (totalPrice || listPrice);
+    });
+
+    // Match each order to a pending transaction by amount
+    const mo = months[idx];
+    const monthStart = new Date(mo.year, mo.month - 1, 1);
+    const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
+
+    Object.values(orderMap).forEach(order => {
+      // Find matching Amazon pending transaction by amount (within $0.02) and date (±5 days)
+      const orderDateObj = new Date(order.orderDate + 'T12:00:00');
+      const match = pendingTxns.find(t => {
+        if (!isAmazonMerchant(t.merchant, t.rawName)) return false;
+        if (Math.abs(t.amount - order.total) > 0.02) return false;
+        const txnDate = new Date(t.date + 'T12:00:00');
+        const daysDiff = Math.abs((txnDate - orderDateObj) / 86400000);
+        return daysDiff <= 5;
+      });
+
+      if (match) {
+        match.amazonItems = order.items;
+        match.amazonOrderNumber = order.orderNumber;
+        match.amazonOrderDate = order.orderDate;
+        match.amazonMode = true;
+      }
+      // If no match yet — order is waiting for Plaid. Items stay in AmazonOrders with status: pending.
+    });
+  } catch(e) {
+    console.error('matchAmazonOrders error:', e.message);
+  }
+}
+
+function isAmazonMerchant(merchant, rawName) {
+  const m = (merchant + ' ' + rawName).toLowerCase();
+  return m.includes('amazon') || m.includes('amzn');
+}
+
+// ── CONFIRM AMAZON ITEMS ───────────────────────────────────────────────────────
+async function confirmAmazonItems(txnIdx) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn || !txn.amazonItems) return;
+
+  const items = txn.amazonItems;
+  const categorized = items.filter(item => item.category && item.category !== '');
+  const uncategorized = items.filter(item => !item.category || item.category === '');
+
+  if (!categorized.length) {
+    alert('Please categorize at least one item before saving.');
+    return;
+  }
+
+  // Save each categorized item as a transaction: "Amazon - {Item Name}"
+  const sgId = 'amzn_' + uid();
+  categorized.forEach(item => {
+    const txns = getTxns(trackerIdx, item.category);
+    txns.push({
+      id: txn.id + '_' + item.name.substring(0,10).replace(/\s/g,''),
+      desc: 'Amazon - ' + item.name,
+      amt: item.totalPrice,
+      ts: txn.date + 'T12:00:00.000Z',
+      splitGroupId: sgId,
+      autoGenerated: false,
+    });
+    setTxns(trackerIdx, item.category, txns);
+  });
+
+  // Mark categorized items in AmazonOrders sheet
+  try {
+    const rows = await readSheet(BUDGET_SHEET_ID, 'AmazonOrders!A:K');
+    const updated = [...rows];
+    categorized.forEach(item => {
+      if (item.rowIdx && updated[item.rowIdx]) {
+        updated[item.rowIdx][8] = item.category;   // Category
+        updated[item.rowIdx][9] = 'categorized';    // Status
+      }
+    });
+    // If any uncategorized remain, leave them as 'pending' so they reload next time
+    await clearAndWrite(BUDGET_SHEET_ID, 'AmazonOrders!A1', updated);
+  } catch(e) {
+    console.error('Save AmazonOrders error:', e.message);
+  }
+
+  // Mark the Plaid transaction as processed
+  trackerData.confirmedPlaidIds.add(txn.id);
+  pendingTxns.splice(txnIdx, 1);
+
+  // If any uncategorized remain, they'll re-appear next sync via matchAmazonOrders
+  scheduleSave();
+  renderTracker(trackerIdx);
+}
+
+function addAmazonItemManual(txnIdx) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn) return;
+  if (!txn.amazonItems) txn.amazonItems = [];
+  txn.amazonItems.push({
+    name: '',
+    listPrice: 0,
+    taxShare: 0,
+    totalPrice: 0,
+    category: '',
+    status: 'manual',
+    manual: true,
+  });
+  // Recalc tax shares proportionally after adding manual item
+  recalcAmazonTax(txnIdx);
+  renderTracker(trackerIdx);
+}
+
+function updateAmazonItem(txnIdx, itemIdx, field, value) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems) return;
+  const item = txn.amazonItems[itemIdx];
+  if (!item) return;
+
+  item[field] = field === 'category' ? value : (parseFloat(value) || 0);
+  if (field === 'listPrice') {
+    item.totalPrice = 0; // will be recalced
+    recalcAmazonTax(txnIdx);
+  }
+  renderTracker(trackerIdx);
+}
+
+function updateAmazonItemCat(txnIdx, itemIdx, value) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems) return;
+  txn.amazonItems[itemIdx].category = value;
+  renderTracker(trackerIdx);
+}
+
+function updateAmazonItemName(txnIdx, itemIdx, value) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems) return;
+  txn.amazonItems[itemIdx].name = value;
+}
+
+function applyAmazonCatToAll(txnIdx, cat) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems || !cat) return;
+  txn.amazonItems.forEach(item => item.category = cat);
+  renderTracker(trackerIdx);
+}
+
+function removeAmazonItem(txnIdx, itemIdx) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems) return;
+  txn.amazonItems.splice(itemIdx, 1);
+  recalcAmazonTax(txnIdx);
+  renderTracker(trackerIdx);
+}
+
+function recalcAmazonTax(txnIdx) {
+  const txn = pendingTxns[txnIdx];
+  if (!txn?.amazonItems) return;
+  const items = txn.amazonItems;
+  const subtotal = items.reduce((s, i) => s + (i.listPrice || 0), 0);
+  const totalItems = items.reduce((s, i) => s + (i.totalPrice || i.listPrice || 0), 0);
+  const totalTax = Math.max(0, txn.amount - subtotal);
+  if (totalTax <= 0 || subtotal <= 0) return;
+  items.forEach(item => {
+    const taxShare = parseFloat(((item.listPrice / subtotal) * totalTax).toFixed(2));
+    item.taxShare = taxShare;
+    item.totalPrice = parseFloat((item.listPrice + taxShare).toFixed(2));
+  });
+}
+
+// ── PENDING QUEUE RENDER ───────────────────────────────────────────────────────
+function renderPendingQueue() {
+  if (!pendingTxns.length) return '';
+
+  const rows = pendingTxns.map((txn, i) => {
+    const dateStr = new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    const pendingBadge = txn.pending
+      ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600;flex-shrink:0">⏳</span>'
+      : '';
+    const isAmzn = isAmazonMerchant(txn.merchant, txn.rawName);
+
+    // ── AMAZON MODE ──
+    if (isAmzn && txn.amazonMode && txn.amazonItems) {
+      return renderAmazonRow(txn, i, dateStr, pendingBadge);
+    }
+
+    // ── AMAZON WAITING ──
+    if (isAmzn && !txn.pending) {
+      return renderAmazonWaiting(txn, i, dateStr, pendingBadge);
+    }
+
+    // ── STANDARD ROW ──
+    return renderStandardRow(txn, i, dateStr, pendingBadge);
+  }).join('');
+
+  return `<div style="background:#1a1d27;border-radius:12px;margin-bottom:10px;overflow:hidden;border:1px solid #252840">
+    <div style="padding:8px 12px;border-bottom:1px solid #252840;display:flex;align-items:center;gap:12px;background:#161929">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555878">Review Transactions</div>
+      <div style="font-size:11px;color:#555878">${pendingTxns.length} to categorize</div>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function renderStandardRow(txn, i, dateStr, pendingBadge) {
+  const opts = budgetPlan.filter(c => !isExcludedSection(c.Section)).map(c =>
+    `<option value="${esc(c.Category)}" ${c.Category === txn.suggestedCat ? 'selected' : ''}>${c.Category}</option>`
+  ).join('');
+  const showRaw = txn.rawName && txn.rawName !== txn.merchant;
+
+  if (txn.splits) {
+    const splitTotal = txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0);
+    const balanced = Math.abs(splitTotal - txn.amount) < 0.01;
+    const splitRows = txn.splits.map((sp, si) => {
+      const spOpts = budgetPlan.filter(c => !isExcludedSection(c.Section)).map(c =>
+        `<option value="${esc(c.Category)}" ${c.Category === sp.cat ? 'selected' : ''}>${c.Category}</option>`
+      ).join('');
+      return `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding-left:36px">
+        <select onchange="updatePendingSplit(${i},${si},'cat',this.value)"
+          style="flex:1;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:11px;background:#1e2235;color:#e8e9ed">
+          <option value="">— Category —</option>${spOpts}
+        </select>
+        <input type="number" value="${sp.amt}" placeholder="0.00" step="0.01"
+          oninput="updatePendingSplit(${i},${si},'amt',this.value)"
+          style="width:64px;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:11px;text-align:right;background:#1e2235;color:#e8e9ed">
+        ${txn.splits.length > 2 ? `<button onclick="removePendingSplitRow(${i},${si})" style="background:none;border:none;color:#ef476f;font-size:13px;cursor:pointer">✕</button>` : ''}
+      </div>`;
+    }).join('');
+    return `<div style="padding:7px 10px;border-bottom:1px solid #252840">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <span style="font-size:11px;color:#555878;min-width:36px">${dateStr}</span>
+        <span style="font-size:13px;font-weight:500;color:#e8e9ed;flex:1">${txn.merchant}</span>${pendingBadge}
+        <span style="font-size:13px;font-weight:600;color:#ef476f">$${txn.amount.toFixed(2)}</span>
+      </div>
+      ${splitRows}
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-left:36px;margin-top:4px">
+        <div style="display:flex;gap:8px">
+          <button onclick="addPendingSplitRow(${i})" style="background:none;border:none;color:#4f6ef7;font-size:11px;cursor:pointer">+ row</button>
+          <button onclick="togglePendingSplit(${i})" style="background:none;border:none;color:#555878;font-size:11px;cursor:pointer">cancel</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span id="split_rem_${i}" style="font-size:11px;font-weight:600;color:${balanced?'#34d47c':'#f59e3f'}">${balanced?'✓ Balanced':'Rem: $'+(txn.amount-splitTotal).toFixed(2)}</span>
+          <button onclick="confirmPendingTxn(${i})" style="background:#34d47c;color:#0a2010;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">✓ Save</button>
+          <button onclick="skipPendingTxn(${i})" style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #252840">
+    <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px;font-weight:500;color:#e8e9ed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>${pendingBadge}
+      </div>
+      ${showRaw ? `<div style="font-size:10px;color:#555878">${txn.rawName}</div>` : ''}
+    </div>
+    <span style="font-size:13px;font-weight:600;color:#ef476f;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
+    <select id="pending_cat_${i}" onchange="onPendingCatChange(${i},this)"
+      style="width:150px;flex-shrink:0;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:12px;background:#1e2235;color:#e8e9ed">
+      <option value="">— Category —</option>${opts}
+    </select>
+    <button onclick="togglePendingSplit(${i})" title="Split"
+      style="background:#1e2235;color:#9698b0;border:1px solid #353860;border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;flex-shrink:0">⇄</button>
+    <button onclick="confirmPendingTxn(${i})"
+      style="background:#34d47c;color:#0a2010;border:none;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
+    <button onclick="skipPendingTxn(${i})"
+      style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>
+  </div>`;
+}
+
+function renderAmazonWaiting(txn, i, dateStr, pendingBadge) {
+  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #252840">
+    <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:center;gap:4px">
+        <span style="font-size:13px;font-weight:500;color:#e8e9ed">Amazon</span>${pendingBadge}
+        <span style="font-size:10px;background:#1e2235;color:#f59e3f;border-radius:4px;padding:1px 6px;font-weight:600;border:1px solid #353860">⏳ Waiting for order email</span>
+      </div>
+      <div style="font-size:10px;color:#555878">${txn.rawName}</div>
+    </div>
+    <span style="font-size:13px;font-weight:600;color:#ef476f;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
+    <button onclick="skipPendingTxn(${i})"
+      style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0" title="Skip">✕</button>
+  </div>`;
+}
+
+function renderAmazonRow(txn, i, dateStr, pendingBadge) {
+  const items = txn.amazonItems;
+  const cats = budgetPlan.filter(c => !isExcludedSection(c.Section));
+  const catOpts = cats.map(c => `<option value="${esc(c.Category)}">${c.Category}</option>`).join('');
+  const allCatSel = cats.map(c => `<option value="${esc(c.Category)}">${c.Category}</option>`).join('');
+
+  const allCatted = items.every(item => item.category);
+  const someCatted = items.some(item => item.category);
+  const itemTotal = parseFloat(items.reduce((s, item) => s + (item.totalPrice || item.listPrice || 0), 0).toFixed(2));
+  const unallocated = parseFloat((txn.amount - itemTotal).toFixed(2));
+
+  const itemRows = items.map((item, ii) => {
+    const iOpts = cats.map(c =>
+      `<option value="${esc(c.Category)}" ${c.Category === item.category ? 'selected' : ''}>${c.Category}</option>`
+    ).join('');
+    const isManual = item.manual;
+    return `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #1a1e2a">
+      ${isManual
+        ? `<input type="text" placeholder="Item name" value="${esc(item.name)}"
+            oninput="updateAmazonItemName(${i},${ii},this.value)"
+            style="flex:1;min-width:0;border:1px solid #353860;border-radius:6px;padding:4px 8px;font-size:12px;background:#1e2235;color:#e8e9ed">`
+        : `<span style="flex:1;min-width:0;font-size:12px;color:#c0c2d0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(item.name)}">${item.name}</span>`}
+      <span style="font-size:12px;font-weight:600;color:#e8e9ed;white-space:nowrap;flex-shrink:0">$${(item.totalPrice||item.listPrice||0).toFixed(2)}</span>
+      ${isManual
+        ? `<input type="number" placeholder="Price" value="${item.listPrice||''}" step="0.01" min="0"
+            oninput="updateAmazonItem(${i},${ii},'listPrice',this.value)"
+            style="width:64px;flex-shrink:0;border:1px solid #353860;border-radius:6px;padding:4px 6px;font-size:11px;text-align:right;background:#1e2235;color:#e8e9ed">`
+        : ''}
+      <span style="font-size:10px;color:#555878;flex-shrink:0">+$${(item.taxShare||0).toFixed(2)} tax</span>
+      <select onchange="updateAmazonItemCat(${i},${ii},this.value)"
+        style="width:140px;flex-shrink:0;border:1px solid ${item.category?'#34d47c':'#353860'};border-radius:6px;padding:3px 5px;font-size:11px;background:#1e2235;color:#e8e9ed">
+        <option value="">— Category —</option>${iOpts}
+      </select>
+      <button onclick="removeAmazonItem(${i},${ii})"
+        style="background:none;border:none;color:#555878;font-size:13px;cursor:pointer;flex-shrink:0;padding:0 2px" title="Remove item">✕</button>
+    </div>`;
+  }).join('');
+
+  return `<div style="border-bottom:1px solid #252840">
+    <!-- Amazon order header -->
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#161929;border-bottom:1px solid #252840">
+      <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+      <span style="font-size:13px;font-weight:600;color:#f59e3f">📦 Amazon Order</span>
+      ${pendingBadge}
+      ${txn.amazonOrderNumber ? `<span style="font-size:10px;color:#555878;font-family:monospace">${txn.amazonOrderNumber}</span>` : ''}
+      <span style="margin-left:auto;font-size:14px;font-weight:700;color:#ef476f">$${txn.amount.toFixed(2)}</span>
+    </div>
+
+    <!-- Apply all to one category -->
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#13151f;border-bottom:1px solid #252840">
+      <span style="font-size:11px;color:#555878;flex-shrink:0">Apply all to:</span>
+      <select id="amzn_all_cat_${i}"
+        style="flex:1;max-width:180px;border:1px solid #353860;border-radius:6px;padding:4px 6px;font-size:12px;background:#1e2235;color:#e8e9ed">
+        <option value="">— Category —</option>${allCatSel}
+      </select>
+      <button onclick="applyAmazonCatToAll(${i}, document.getElementById('amzn_all_cat_${i}').value)"
+        style="background:#4f6ef7;color:#fff;border:none;border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Apply to all</button>
+      <button onclick="addAmazonItemManual(${i})"
+        style="background:#1e2235;color:#9698b0;border:1px solid #353860;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:auto">+ Add item</button>
+    </div>
+
+    <!-- Item rows -->
+    ${itemRows}
+
+    <!-- Unallocated remainder -->
+    ${Math.abs(unallocated) > 0.02 ? `
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#1a1e2a;font-size:11px">
+      <span style="color:#555878;flex:1">Unallocated remainder</span>
+      <span style="color:${unallocated > 0 ? '#f59e3f' : '#ef476f'};font-weight:600">${unallocated > 0 ? '+' : ''}$${unallocated.toFixed(2)}</span>
+    </div>` : ''}
+
+    <!-- Footer actions -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#13151f">
+      <div style="font-size:11px;color:#555878">${items.filter(it=>it.category).length}/${items.length} items categorized</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="skipPendingTxn(${i})"
+          style="background:#252840;color:#555878;border:none;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer">Skip</button>
+        <button onclick="confirmAmazonItems(${i})"
+          style="background:${someCatted?'#34d47c':'#252840'};color:${someCatted?'#0a2010':'#555878'};border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer">
+          ✓ Save ${allCatted ? 'all' : someCatted ? 'categorized' : ''}
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── EXISTING HELPERS (unchanged) ───────────────────────────────────────────────
 function onPendingCatChange(idx, selectEl) {
   const txn = pendingTxns[idx];
   if (!txn) return;
-  const newCat = selectEl.value;
-  if (!newCat) return;
-  // If the user changed to something different from the suggestion, auto-confirm
-  // If it matched the suggestion already, they actively picked it — also auto-confirm
-  // Either way: any deliberate change = save immediately
-  if (newCat !== txn.suggestedCat) {
-    confirmPendingTxn(idx);
-  }
-  // If they picked the same as suggestion, leave ✓ button for them to click
+  if (selectEl.value && selectEl.value !== txn.suggestedCat) confirmPendingTxn(idx);
 }
 
 function confirmPendingTxn(idx) {
   const txn = pendingTxns[idx];
   if (!txn) return;
-
-  // Check if this is a split transaction
   if (txn.splits && txn.splits.length > 0) {
-    // Validate splits add up
     const total = txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0);
     if (Math.abs(total - txn.amount) > 0.02) {
       alert(`Split amounts ($${total.toFixed(2)}) must equal total ($${txn.amount.toFixed(2)})`);
@@ -2125,10 +2524,8 @@ function confirmPendingTxn(idx) {
       const txns = getTxns(trackerIdx, sp.cat);
       txns.push({id: txn.id + '_' + sp.cat, desc: txn.merchant, amt: parseFloat(sp.amt), ts: txn.date + 'T12:00:00.000Z', splitGroupId: sgId, autoGenerated: false});
       setTxns(trackerIdx, sp.cat, txns);
-      expandedCats.add(sp.cat);
     });
   } else {
-    // Single category
     const sel = document.getElementById('pending_cat_' + idx);
     const cat = sel ? sel.value : txn.suggestedCat;
     if (!cat) { alert('Please select a category'); return; }
@@ -2136,11 +2533,10 @@ function confirmPendingTxn(idx) {
     const txns = getTxns(trackerIdx, cat);
     txns.push({id: txn.id, desc: txn.merchant, amt: txn.amount, ts: txn.date + 'T12:00:00.000Z', splitGroupId: null, autoGenerated: false});
     setTxns(trackerIdx, cat, txns);
-    expandedCats.add(cat);
   }
-
   trackerData.confirmedPlaidIds.add(txn.id);
   pendingTxns.splice(idx, 1);
+  scheduleSave();
   renderTracker(trackerIdx);
 }
 
@@ -2153,147 +2549,38 @@ function skipPendingTxn(idx) {
 function togglePendingSplit(idx) {
   const txn = pendingTxns[idx];
   if (!txn) return;
-  if (txn.splits) {
-    // Remove split mode
-    txn.splits = null;
-  } else {
-    // Enter split mode — start with two rows
-    const cat = txn.suggestedCat || (budgetPlan[0] && budgetPlan[0].Category) || '';
-    txn.splits = [
-      {cat, amt: (txn.amount / 2).toFixed(2)},
-      {cat: '', amt: (txn.amount / 2).toFixed(2)},
-    ];
-  }
+  txn.splits = txn.splits ? null : [
+    {cat: txn.suggestedCat || '', amt: (txn.amount / 2).toFixed(2)},
+    {cat: '', amt: (txn.amount / 2).toFixed(2)},
+  ];
   renderTracker(trackerIdx);
 }
 
 function updatePendingSplit(txnIdx, splitIdx, field, value) {
   const txn = pendingTxns[txnIdx];
-  if (!txn || !txn.splits) return;
+  if (!txn?.splits) return;
   txn.splits[splitIdx][field] = value;
-  // Update remaining display
   const total = txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0);
   const rem = txn.amount - total;
   const remEl = document.getElementById('split_rem_' + txnIdx);
   if (remEl) {
-    remEl.textContent = Math.abs(rem) < 0.01 ? '✓ Balanced' : `Remaining: $${rem.toFixed(2)}`;
-    remEl.style.color = Math.abs(rem) < 0.01 ? '#34c759' : '#ff9500';
+    remEl.textContent = Math.abs(rem) < 0.01 ? '✓ Balanced' : `Rem: $${rem.toFixed(2)}`;
+    remEl.style.color = Math.abs(rem) < 0.01 ? '#34d47c' : '#f59e3f';
   }
 }
 
 function addPendingSplitRow(txnIdx) {
   const txn = pendingTxns[txnIdx];
-  if (!txn || !txn.splits) return;
+  if (!txn?.splits) return;
   txn.splits.push({cat: '', amt: ''});
   renderTracker(trackerIdx);
 }
 
 function removePendingSplitRow(txnIdx, splitIdx) {
   const txn = pendingTxns[txnIdx];
-  if (!txn || !txn.splits || txn.splits.length <= 2) return;
+  if (!txn?.splits || txn.splits.length <= 2) return;
   txn.splits.splice(splitIdx, 1);
   renderTracker(trackerIdx);
-}
-
-function renderPendingQueue() {
-  if (!pendingTxns.length) return '';
-
-  const rows = pendingTxns.map((txn, i) => {
-    const opts = budgetPlan.map(c =>
-      `<option value="${c.Category}" ${c.Category === txn.suggestedCat ? 'selected' : ''}>${c.Category}</option>`
-    ).join('');
-
-    const dateDisplay = new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
-    const splitTotal = txn.splits ? txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0) : 0;
-    const splitBalanced = txn.splits && Math.abs(splitTotal - txn.amount) < 0.01;
-
-    // Everything left-aligned: [date] [merchant] [$amt] [dropdown] [⇄][✓][✕] — dead space on right
-    // If user actively changes the dropdown away from the suggestion → auto-confirm
-    // If suggestion was already selected → still requires ✓ click
-    const showRaw = txn.rawName && txn.rawName !== txn.merchant;
-    const pendingBadge = txn.pending
-      ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600;flex-shrink:0">⏳ Pending</span>'
-      : '';
-    const singleRow = !txn.splits ? `
-      <div style="display:flex;align-items:center;gap:5px;padding:5px 10px;border-bottom:1px solid #f9f9f9;justify-content:flex-start">
-        <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0;min-width:36px">${dateDisplay}</span>
-        <div style="flex-shrink:0;max-width:240px">
-          <div style="display:flex;align-items:center;gap:4px">
-            <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
-            ${pendingBadge}
-          </div>
-          ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
-        </div>
-        <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">\$${txn.amount.toFixed(2)}</span>
-        <select id="pending_cat_${i}"
-          onchange="onPendingCatChange(${i}, this)"
-          style="width:160px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:7px;padding:3px 5px;font-size:12px;background:#fff">
-          <option value="">— Category —</option>${opts}
-        </select>
-        <button onclick="togglePendingSplit(${i})" title="Split"
-          style="background:#f2f2f7;color:#3a3a3c;border:none;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">⇄</button>
-        <button onclick="confirmPendingTxn(${i})"
-          style="background:#34c759;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
-        <button onclick="skipPendingTxn(${i})"
-          style="background:#f2f2f7;color:#8e8e93;border:none;border-radius:6px;padding:3px 8px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✕</button>
-      </div>
-    ` : '';
-
-    // Split mode — more compact version
-    const splitMode = txn.splits ? `
-      <div style="padding:5px 10px;border-bottom:1px solid #f9f9f9">
-        <div style="display:flex;align-items:center;gap:5px;margin-bottom:4px">
-          <span style="font-size:11px;color:#8e8e93;white-space:nowrap;flex-shrink:0">${dateDisplay}</span>
-          <div style="flex-shrink:0;max-width:240px">
-            <div style="display:flex;align-items:center;gap:4px">
-              <div style="font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</div>
-              ${txn.pending ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600">⏳ Pending</span>' : ''}
-            </div>
-            ${showRaw ? `<div style="font-size:10px;color:#8e8e93;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.rawName}</div>` : ''}
-          </div>
-          <span style="font-size:13px;font-weight:600;color:#ff3b30;white-space:nowrap;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
-        </div>
-        ${txn.splits.map((sp, si) => {
-          const spOpts = budgetPlan.map(c =>
-            `<option value="${c.Category}" ${c.Category === sp.cat ? 'selected' : ''}>${c.Category}</option>`
-          ).join('');
-          return `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding-left:8px">
-            <select onchange="updatePendingSplit(${i},${si},'cat',this.value)"
-              style="flex:1;min-width:0;border:1.5px solid #d1d1d6;border-radius:6px;padding:3px 5px;font-size:11px;background:#fff">
-              <option value="">— Category —</option>${spOpts}
-            </select>
-            <input type="number" value="${sp.amt}" placeholder="0.00" step="0.01" min="0"
-              oninput="updatePendingSplit(${i},${si},'amt',this.value)"
-              style="width:60px;flex-shrink:0;border:1.5px solid #d1d1d6;border-radius:6px;padding:3px 5px;font-size:11px;text-align:right">
-            ${txn.splits.length > 2 ? `<button onclick="removePendingSplitRow(${i},${si})" style="background:none;border:none;color:#ff3b30;font-size:13px;cursor:pointer;padding:0 2px;flex-shrink:0">&#xD7;</button>` : ''}
-          </div>`;
-        }).join('')}
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px;padding-left:8px">
-          <div style="display:flex;gap:8px">
-            <button onclick="addPendingSplitRow(${i})" style="background:none;border:none;color:#007aff;font-size:11px;cursor:pointer;padding:0">+ row</button>
-            <button onclick="togglePendingSplit(${i})" style="background:none;border:none;color:#8e8e93;font-size:11px;cursor:pointer;padding:0">cancel</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span id="split_rem_${i}" style="font-size:11px;font-weight:600;color:${splitBalanced ? '#34c759' : '#ff9500'}">${splitBalanced ? '✓ Balanced' : `Rem: $${(txn.amount - splitTotal).toFixed(2)}`}</span>
-            <button onclick="confirmPendingTxn(${i})"
-              style="background:#34c759;color:#fff;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">✓ Save</button>
-            <button onclick="skipPendingTxn(${i})"
-              style="background:#f2f2f7;color:#8e8e93;border:none;border-radius:6px;padding:3px 8px;font-size:11px;font-weight:700;cursor:pointer">✕</button>
-          </div>
-        </div>
-      </div>
-    ` : '';
-
-    return singleRow + splitMode;
-  }).join('');
-
-  return `<div style="background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden;display:inline-block;min-width:500px;max-width:100%">
-    <div style="padding:8px 10px;border-bottom:1px solid #f2f2f7;display:flex;align-items:center;gap:12px">
-      <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#3a3a3c">Review Transactions</div>
-      <div style="font-size:11px;color:#8e8e93">${pendingTxns.length} to categorize &nbsp;·&nbsp; ⇄ = split</div>
-    </div>
-    ${rows}
-  </div>`;
 }
 // ── SNAPSHOT & PLAID BALANCES ─────────────────────────────────────────────────
 function loadPlaidScript() {
