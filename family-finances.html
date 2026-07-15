@@ -18,13 +18,16 @@
 <script src="https://accounts.google.com/gsi/client"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:16px 16px 48px}
-h1{font-size:20px;font-weight:700;margin-bottom:4px}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:0 16px 48px}
+h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 .subtitle{font-size:13px;color:#6e6e73;margin-bottom:14px}
+/* APP HEADER (sticky, dark, consistent across every tab) */
+.app-header{position:sticky;top:0;left:0;right:0;z-index:20;background:#0d1021;margin:0 -16px;padding:calc(env(safe-area-inset-top, 0px) + 10px) 16px 0}
+.sync-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 /* TABS */
-.tabs{display:flex;gap:6px;margin-bottom:20px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.tabs{display:flex;gap:6px;margin-bottom:0;padding-bottom:10px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{flex-shrink:0;padding:7px 13px;border-radius:20px;border:1.5px solid #d1d1d6;background:#fff;font-size:13px;font-weight:500;color:#3a3a3c;cursor:pointer;white-space:nowrap}
+.tab{flex-shrink:0;padding:6px 12px;border-radius:20px;border:1.5px solid #2a3060;background:transparent;font-size:12.5px;font-weight:500;color:#8890b0;cursor:pointer;white-space:nowrap}
 .tab.active{background:#007aff;border-color:#007aff;color:#fff}
 .view{display:none}.view.active{display:block}
 #tracker{position:relative}
@@ -40,8 +43,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .spinner{width:36px;height:36px;border:3px solid #e5e5ea;border-top-color:#007aff;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* SYNC BAR */
-.sync-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.sync-info{display:flex;align-items:center;gap:6px;font-size:12px;color:#8e8e93}
+.sync-info{display:flex;align-items:center;gap:6px;font-size:12px;color:#9698b0}
 .sync-dot{width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0}
 .sync-dot.syncing{background:#ff9500;animation:pulse 1s infinite}
 .sync-dot.error{background:#ff3b30}
@@ -298,6 +300,58 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 .tr-pending-wrap{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px}
 .tr-pending-hdr{padding:8px 14px;border-bottom:1px solid #252840;background:#161929;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
 .tr-tooltip{position:fixed;background:#1e2240;border:1px solid #353860;border-radius:10px;padding:10px 14px;font-size:12px;pointer-events:none;display:none;z-index:300;min-width:160px}
+/* Mobile sidebar toggle + backdrop (hidden on desktop) */
+.tr-sb-toggle{display:none;background:#1a1e35;border:1px solid #252840;border-radius:8px;width:34px;height:34px;flex-shrink:0;align-items:center;justify-content:center;color:#c0c2d0;font-size:16px;cursor:pointer;margin:0 8px}
+.tr-sidebar-backdrop{display:none}
+
+/* ── MOBILE / NARROW SCREEN LAYOUT ────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .app-header{padding-top:calc(env(safe-area-inset-top, 0px) + 8px)}
+  h1{font-size:15px}
+  .tab{padding:5px 10px;font-size:12px}
+
+  .tr-sb-toggle{display:flex}
+
+  .tr-sidebar{
+    position:fixed; top:0; bottom:0; left:0; width:78vw; max-width:280px;
+    z-index:60; transform:translateX(-100%); transition:transform .22s ease;
+    box-shadow:2px 0 24px rgba(0,0,0,.4);
+    padding-top:env(safe-area-inset-top, 0px);
+  }
+  .tr-sidebar.open{transform:translateX(0)}
+  .tr-sidebar-backdrop.open{
+    display:block; position:fixed; inset:0; z-index:55; background:rgba(0,0,0,.5);
+  }
+
+  .tr-sum-bar{
+    height:auto; flex-wrap:wrap; align-items:center; padding:6px 4px;
+  }
+  .tr-sum-item{
+    min-width:0; flex:1 1 22%; padding:0 6px; border-right:none;
+  }
+  .tr-sum-label{font-size:8px}
+  .tr-sum-value{font-size:13px}
+  .tr-sum-bar-item{
+    order:5; flex:1 1 100%; padding:6px 10px 4px; border-top:1px solid #252840; margin-top:4px;
+  }
+  .tr-sum-actions{
+    order:6; flex:1 1 100%; border-left:none; border-top:1px solid #252840;
+    margin-left:0; padding:8px 8px 4px; flex-wrap:wrap; justify-content:flex-end;
+  }
+  .tr-btn-primary, .tr-btn-ghost{padding:7px 10px;font-size:11px}
+  .sync-info{order:-1;margin-right:auto}
+
+  .tr-sankey-panel{padding:10px 12px 8px}
+  .tr-sankey-title{font-size:9px}
+  .tr-dbtn{padding:2px 6px;font-size:9px}
+
+  .tr-sec-detail{padding:12px}
+  .tr-sec-title{font-size:18px}
+  .tr-sec-stats{gap:12px}
+  .tr-cat-grid{grid-template-columns:1fr}
+
+  .tr-txn-row{font-size:11px}
+}
 .tr-tt-title{font-weight:700;color:#fff;margin-bottom:5px;font-size:13px}
 .tr-tt-row{display:flex;justify-content:space-between;gap:20px;color:#8890b0;margin-top:3px}
 .tr-tt-val{color:#e8e9ed;font-weight:600}
@@ -324,23 +378,25 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
 
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none">
-  <div class="sync-bar">
-    <h1>Givens Family Finances</h1>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="sync-info"><div class="sync-dot" id="syncDot"></div><span id="syncStatus">Saved</span></div>
-      <button class="btn-secondary" onclick="signOut()">Sign out</button>
+  <div class="app-header">
+    <div class="sync-bar">
+      <h1>Givens Family Finances</h1>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="sync-info"><div class="sync-dot" id="syncDot"></div><span id="syncStatus">Saved</span></div>
+        <button onclick="signOut()" style="background:transparent;color:#9698b0;border:1px solid #2a3060;border-radius:10px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer">Sign out</button>
+      </div>
     </div>
-  </div>
 
-  <div class="tabs">
-    <div class="tab active" onclick="showTab('tracker',this)">Budget Overview</div>
-    <div class="tab" onclick="showTab('monthly',this)">Monthly</div>
-    <div class="tab" onclick="showTab('projection',this)">Projection</div>
-    <div class="tab" onclick="showTab('snapshot',this)">Snapshot</div>
-    <div class="tab" onclick="showTab('windfall',this)">Windfall</div>
-    <div class="tab" onclick="showTab('retirement',this)">Retirement</div>
-    <div class="tab" onclick="showTab('goals',this)">Goals</div>
-    <div class="tab" onclick="showTab('insights',this)">Insights</div>
+    <div class="tabs">
+      <div class="tab active" onclick="showTab('tracker',this)">Budget Overview</div>
+      <div class="tab" onclick="showTab('monthly',this)">Monthly</div>
+      <div class="tab" onclick="showTab('projection',this)">Projection</div>
+      <div class="tab" onclick="showTab('snapshot',this)">Snapshot</div>
+      <div class="tab" onclick="showTab('windfall',this)">Windfall</div>
+      <div class="tab" onclick="showTab('retirement',this)">Retirement</div>
+      <div class="tab" onclick="showTab('goals',this)">Goals</div>
+      <div class="tab" onclick="showTab('insights',this)">Insights</div>
+    </div>
   </div>
 
   <!-- BUDGET OVERVIEW VIEW -->
@@ -348,7 +404,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
     <div class="tr-layout">
 
       <!-- SIDEBAR -->
-      <div class="tr-sidebar">
+      <div class="tr-sidebar" id="trSidebar">
         <div class="tr-sb-section">
           <span class="tr-sb-label">Month</span>
           <div class="tr-month-sel" id="trMonthSel"></div>
@@ -367,12 +423,14 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
           <div id="trOverallPct" style="font-size:11px;font-weight:600;color:#e8e9ed"></div>
         </div>
       </div>
+      <div class="tr-sidebar-backdrop" id="trSidebarBackdrop" onclick="trToggleSidebar(false)"></div>
 
       <!-- MAIN -->
       <div class="tr-main">
 
         <!-- SUMMARY BAR -->
         <div class="tr-sum-bar">
+          <button class="tr-sb-toggle" id="trSidebarToggle" onclick="trToggleSidebar()">&#9776;</button>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Income</div>
             <div class="tr-sum-value" id="trSumIncome" style="color:#7b9fff"></div>
@@ -1203,7 +1261,8 @@ function trDrawSankey(idx, sections) {
   ctx.clearRect(0, 0, W, H);
 
   const NW = 10, GAP = 5;
-  const PAD_L = 110, PAD_R = 180, PAD_T = 14, PAD_B = 14;
+  const isNarrow = W < 480;
+  const PAD_L = isNarrow ? 54 : 110, PAD_R = isNarrow ? 74 : 180, PAD_T = 14, PAD_B = 14;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
@@ -1283,24 +1342,25 @@ function trDrawSankey(idx, sections) {
     ctx.textBaseline = 'middle';
     if (isFirst) {
       ctx.textAlign = 'right';
-      if (showLabel) {
+      if (showLabel && !isNarrow) {
         ctx.font = '500 11px -apple-system, BlinkMacSystemFont, sans-serif';
         ctx.fillStyle = '#9698b8';
         ctx.fillText(n.label, n.x - 8, midY - 7);
       }
       if (showAmt) {
-        ctx.font = '700 13px -apple-system, BlinkMacSystemFont, sans-serif';
+        ctx.font = `700 ${isNarrow ? 11 : 13}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillStyle = '#ffffff';
-        ctx.fillText(n.display, n.x - 8, midY + 7);
+        ctx.fillText(n.display, n.x - 8, midY + (isNarrow ? 0 : 7));
       }
     } else {
       ctx.textAlign = 'left';
-      const tx = n.x + NW + 8;
-      const labelSize = isLast ? 10 : 11;
+      const tx = n.x + NW + (isNarrow ? 5 : 8);
+      const labelSize = isNarrow ? 9 : (isLast ? 10 : 11);
+      const labelLen = isNarrow ? (isLast ? 10 : 12) : (isLast ? 18 : 20);
       if (showLabel) {
         ctx.font = `${isHov ? 700 : 500} ${labelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
         ctx.fillStyle = isHov ? '#ffffff' : '#9698b8';
-        ctx.fillText(n.label.substring(0, isLast ? 18 : 20), tx, midY - (showAmt ? 6 : 0));
+        ctx.fillText(n.label.substring(0, labelLen), tx, midY - (showAmt ? 6 : 0));
       }
       if (showAmt) {
         ctx.font = `700 ${labelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
@@ -4020,6 +4080,15 @@ function updateSSResults() {
   }
 }
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
+function trToggleSidebar(force) {
+  const sb = document.getElementById('trSidebar');
+  const bg = document.getElementById('trSidebarBackdrop');
+  if (!sb || !bg) return;
+  const open = force !== undefined ? force : !sb.classList.contains('open');
+  sb.classList.toggle('open', open);
+  bg.classList.toggle('open', open);
+}
+
 function showTab(id, el) {
   closeAllDropdowns();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -4626,6 +4695,31 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(err => console.log('SW registration failed:', err));
   });
 }
+
+// Keep the fixed Budget Overview dashboard correctly positioned below the sticky
+// header across orientation changes / window resizes (desktop app window, iPhone rotation, etc).
+window.addEventListener('resize', () => {
+  const tracker = document.getElementById('tracker');
+  const tabsEl = document.querySelector('.tabs');
+  if (tracker && tracker.classList.contains('active') && tabsEl) {
+    tracker.style.top = Math.round(tabsEl.getBoundingClientRect().bottom) + 'px';
+    if (typeof trDrawSankey === 'function') trDrawSankey(trackerIdx, getTrSections());
+  }
+  // Auto-close the mobile sidebar drawer if the window is resized back to desktop width
+  if (window.innerWidth > 768) trToggleSidebar(false);
+});
+
+// Auto-close the mobile sidebar drawer after selecting a month or section
+document.addEventListener('DOMContentLoaded', () => {
+  const sb = document.getElementById('trSidebar');
+  if (sb) {
+    sb.addEventListener('click', (e) => {
+      if (window.innerWidth <= 768 && e.target.closest('button, .tr-sec-nav')) {
+        setTimeout(() => trToggleSidebar(false), 120);
+      }
+    });
+  }
+});
 
 </script>
 </body>
