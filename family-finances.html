@@ -54,7 +54,7 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:var(--text)}
 .tab.active{background:#007aff;border-color:#007aff;color:#fff}
 .view{display:none}.view.active{display:block}
 #tracker{position:relative}
-#tracker.active{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0;margin:0;overflow:hidden}
+#tracker.active{display:flex;flex-direction:column;position:fixed;left:0;right:0;bottom:0;z-index:50;padding:0;margin:0;overflow:hidden}
 /* AUTH */
 #authScreen{text-align:center;padding:40px 20px}
 #authScreen h2{font-size:20px;font-weight:600;margin-bottom:12px}
@@ -4328,12 +4328,28 @@ function forceSignOut() {
   location.reload();
 }
 // ── SHEETS API ────────────────────────────────────────────────────────────────
-async function gapi(method, url, body) {
+async function gapi(method, url, body, _isRetry) {
   const r = await fetch(url, {
     method,
     headers: {'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json'},
     body: body ? JSON.stringify(body) : undefined
   });
+
+  if ((r.status === 401 || r.status === 403) && !_isRetry) {
+    // Token likely expired mid-session. Try one silent refresh (no visible
+    // prompt if the browser still has an active Google session) and retry
+    // this exact request once before giving up.
+    const refreshed = await new Promise(resolve => {
+      requestToken('', () => resolve(true), () => resolve(false));
+    });
+    if (refreshed) return gapi(method, url, body, true);
+  }
+
+  if (!r.ok) {
+    const err = new Error(`Sheets API ${method} ${url.split('/values/')[1] || ''} failed: ${r.status}`);
+    err.status = r.status;
+    throw err;
+  }
   return r;
 }
 
@@ -4352,17 +4368,21 @@ async function ensureTabExists(sheetId, title, headerRow) {
 }
 
 async function readSheet(sheetId, range) {
-  const r = await gapi('GET', `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`);
-  if (r.status === 401 || r.status === 403) {
-    accessToken = null;
-    localStorage.removeItem('gv_token');
-    document.getElementById('loadingScreen').style.display = 'none';
-    document.getElementById('mainApp').style.display = 'none';
-    document.getElementById('authScreen').style.display = 'block';
-    throw new Error('Auth expired — please sign in again');
+  try {
+    const r = await gapi('GET', `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`);
+    const j = await r.json();
+    return j.values || [];
+  } catch (e) {
+    if (e.status === 401 || e.status === 403) {
+      accessToken = null;
+      localStorage.removeItem('gv_token');
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('mainApp').style.display = 'none';
+      document.getElementById('authScreen').style.display = 'block';
+      throw new Error('Auth expired — please sign in again');
+    }
+    throw e;
   }
-  const j = await r.json();
-  return j.values || [];
 }
 
 async function writeSheet(sheetId, range, values) {
