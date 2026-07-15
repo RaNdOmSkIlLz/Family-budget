@@ -399,6 +399,7 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
             </div>
             <button class="tr-btn-ghost" onclick="openAddIncome()">+ Income</button>
             <button class="tr-btn-ghost" onclick="openAdd(trackerIdx, budgetPlan[0]?.Category)">+ Add</button>
+            <button class="tr-btn-ghost" id="skippedBtn" onclick="openSkippedModal()">🗑 Skipped</button>
             <button class="tr-btn-primary" id="syncTxnBtn" onclick="syncPlaidTransactions()">&#8635; Sync Chase</button>
           </div>
         </div>
@@ -477,6 +478,22 @@ h1{font-size:20px;font-weight:700;margin-bottom:4px}
     </div>
   </div>
 </div>
+
+<!-- SKIPPED TRANSACTIONS MODAL -->
+<div class="modal-bg" id="modalSkipped" style="display:none">
+  <div class="modal">
+    <h3>Skipped transactions</h3>
+    <div style="font-size:12px;color:#9698b0;margin-bottom:8px">These won't reappear when you sync. Hit Undo to bring one back into the review queue on your next sync.</div>
+    <div style="text-align:right;margin-bottom:6px">
+      <button id="skippedScopeBtn" onclick="toggleSkippedScope()" style="background:none;border:none;color:#4f6ef7;font-size:11px;cursor:pointer;padding:0">Show all months</button>
+    </div>
+    <div id="skippedModalBody" style="max-height:340px;overflow-y:auto"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSkippedModal()">Close</button>
+    </div>
+  </div>
+</div>
+<script>document.getElementById('modalSkipped').addEventListener('click', e => { if (e.target.id === 'modalSkipped') closeSkippedModal(); });</script>
 
 <!-- DROPDOWN OVERLAY -->
 <div id="ddOverlay" style="display:none;position:fixed;inset:0;z-index:49" onclick="closeAllDropdowns()"></div>
@@ -560,7 +577,8 @@ let accessToken = null, tokenClient;
 let budgetPlan = [];
 let trackerBudgets = {};
 let planConfig = {};
-let trackerData = {state:{}, transactions:{}, sinkingFunds:{}, splitGroups:{}, confirmedPlaidIds: new Set()};
+let trackerData = {state:{}, transactions:{}, sinkingFunds:{}, splitGroups:{}, confirmedPlaidIds: new Set(), skippedTxns: []};
+let skippedModalShowAll = false;
 let merchantMap = {};
 let pendingTxns = [];
 let months = [...BASE_MONTHS];
@@ -967,6 +985,7 @@ function renderTracker(idx) {
   // Sync btn label
   const syncBtn = document.getElementById('syncTxnBtn');
   if (syncBtn && !syncBtn.disabled) syncBtn.textContent = '↺ Sync Chase (' + months[idx].label + ')';
+  updateSkippedBtn();
 
   // Pending queue
   const pq = document.getElementById('pendingQueue');
@@ -2551,9 +2570,91 @@ function confirmPendingTxn(idx) {
 }
 
 function skipPendingTxn(idx) {
-  if (pendingTxns[idx]) trackerData.confirmedPlaidIds.add(pendingTxns[idx].id);
+  const txn = pendingTxns[idx];
+  if (txn) {
+    trackerData.confirmedPlaidIds.add(txn.id);
+    if (!trackerData.skippedTxns.some(s => s.id === txn.id)) {
+      trackerData.skippedTxns.push({
+        id: txn.id,
+        merchant: txn.merchant || txn.rawName || '',
+        amount: txn.amount || 0,
+        date: txn.date || '',
+        skippedAt: new Date().toISOString(),
+      });
+    }
+  }
   pendingTxns.splice(idx, 1);
+  scheduleSave();
   renderTracker(trackerIdx);
+}
+
+function undoSkip(id) {
+  trackerData.skippedTxns = trackerData.skippedTxns.filter(s => s.id !== id);
+  trackerData.confirmedPlaidIds.delete(id);
+  scheduleSave();
+  renderSkippedModal();
+  const status = document.getElementById('syncTxnStatus');
+  if (status) status.textContent = 'Undone — hit Sync Chase to bring it back';
+  updateSkippedBtn();
+}
+
+function getSkippedForMonth(idx) {
+  const mo = months[idx];
+  if (!mo) return trackerData.skippedTxns || [];
+  const monthStart = new Date(mo.year, mo.month - 1, 1);
+  const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
+  return (trackerData.skippedTxns || []).filter(s => {
+    if (!s.date) return false;
+    const d = new Date(s.date + 'T12:00:00');
+    return d >= monthStart && d <= monthEnd;
+  });
+}
+
+function openSkippedModal() {
+  skippedModalShowAll = false;
+  renderSkippedModal();
+  const m = document.getElementById('modalSkipped');
+  if (m) m.style.display = 'flex';
+}
+
+function closeSkippedModal() {
+  const m = document.getElementById('modalSkipped');
+  if (m) m.style.display = 'none';
+}
+
+function toggleSkippedScope() {
+  skippedModalShowAll = !skippedModalShowAll;
+  renderSkippedModal();
+}
+
+function renderSkippedModal() {
+  const body = document.getElementById('skippedModalBody');
+  const scopeBtn = document.getElementById('skippedScopeBtn');
+  if (!body) return;
+  const mo = months[trackerIdx];
+  const list = skippedModalShowAll ? (trackerData.skippedTxns || []) : getSkippedForMonth(trackerIdx);
+  if (scopeBtn) scopeBtn.textContent = skippedModalShowAll ? `Show only ${mo ? mo.label : 'this month'}` : 'Show all months';
+  if (!list.length) {
+    body.innerHTML = `<div style="padding:20px 0;text-align:center;color:#555878;font-size:13px">No skipped transactions${skippedModalShowAll ? '' : ' in ' + (mo ? mo.label : 'this month')}</div>`;
+    return;
+  }
+  const sorted = [...list].sort((a, b) => (b.skippedAt || '').localeCompare(a.skippedAt || ''));
+  body.innerHTML = sorted.map(s => {
+    const dateStr = s.date ? new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #252840">
+      <span style="font-size:11px;color:#555878;min-width:36px">${dateStr}</span>
+      <span style="font-size:13px;color:#e8e9ed;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.merchant)}</span>
+      <span style="font-size:13px;font-weight:600;color:#9698b0">$${s.amount.toFixed(2)}</span>
+      <button onclick="undoSkip('${s.id}')" style="background:#252840;color:#7b9fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">Undo</button>
+    </div>`;
+  }).join('');
+}
+
+function updateSkippedBtn() {
+  const btn = document.getElementById('skippedBtn');
+  if (!btn) return;
+  const n = getSkippedForMonth(trackerIdx).length;
+  btn.textContent = n ? `🗑 Skipped (${n})` : '🗑 Skipped';
 }
 
 function togglePendingSplit(idx) {
@@ -3959,6 +4060,20 @@ async function gapi(method, url, body) {
   return r;
 }
 
+async function ensureTabExists(sheetId, title, headerRow) {
+  try {
+    await gapi('POST', `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
+      requests: [{ addSheet: { properties: { title } } }]
+    });
+    await writeSheet(sheetId, `${title}!A1`, [headerRow]);
+    console.log(`[${title}] tab created`);
+    return true;
+  } catch (e) {
+    console.log(`[${title}] could not auto-create tab:`, e.message);
+    return false;
+  }
+}
+
 async function readSheet(sheetId, range) {
   const r = await gapi('GET', `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}`);
   if (r.status === 401 || r.status === 403) {
@@ -4095,7 +4210,7 @@ async function loadTrackerData() {
     readSheet(BUDGET_SHEET_ID, 'ExtraMonths!A:C'),
   ]);
 
-  trackerData = {state:{}, transactions:{}, sinkingFunds:{}, splitGroups:{}, confirmedPlaidIds: new Set()};
+  trackerData = {state:{}, transactions:{}, sinkingFunds:{}, splitGroups:{}, confirmedPlaidIds: new Set(), skippedTxns: []};
   trackerBudgets = {};
 
   if (stateRows.length > 1) stateRows.slice(1).forEach(r => {
@@ -4149,6 +4264,22 @@ async function loadTrackerData() {
   if (mmRows.length > 1) mmRows.slice(1).forEach(r => {
     if (r[0] && r[1]) merchantMap[r[0].toLowerCase()] = r[1];
   });
+
+  // Load Skipped Transactions tab (dedup for "X" skips so they never resurface on sync)
+  try {
+    const skRows = await readSheet(BUDGET_SHEET_ID, 'SkippedTxns!A:E');
+    trackerData.skippedTxns = [];
+    if (skRows.length > 1) skRows.slice(1).forEach(r => {
+      const [id, merchant, amount, date, skippedAt] = r;
+      if (!id) return;
+      trackerData.skippedTxns.push({id, merchant: merchant || '', amount: parseFloat(amount) || 0, date: date || '', skippedAt: skippedAt || ''});
+      trackerData.confirmedPlaidIds.add(id);
+    });
+    console.log('[SkippedTxns] loaded', trackerData.skippedTxns.length, 'records');
+  } catch(e) {
+    console.log('SkippedTxns tab not found, creating it:', e.message);
+    await ensureTabExists(BUDGET_SHEET_ID, 'SkippedTxns', ['PlaidTxnId','Merchant','Amount','Date','SkippedAt']);
+  }
 
   // Load Balance History tab
   try {
@@ -4276,6 +4407,17 @@ async function saveAll() {
       clearAndWrite(BUDGET_SHEET_ID, 'WindfallLog!A1',     wlRows),
     ]);
 
+    // Skipped Plaid transactions (so "X" skips never resurface on future syncs)
+    // Isolated in its own try/catch: if the SkippedTxns tab hasn't been created yet
+    // in an existing sheet, this shouldn't block the rest of the save.
+    try {
+      const skippedRows = [['PlaidTxnId','Merchant','Amount','Date','SkippedAt']];
+      (trackerData.skippedTxns || []).forEach(s => skippedRows.push([s.id, s.merchant, s.amount, s.date, s.skippedAt]));
+      await clearAndWrite(BUDGET_SHEET_ID, 'SkippedTxns!A1', skippedRows);
+    } catch (e) {
+      console.log('SkippedTxns save skipped — tab may not exist yet:', e.message);
+    }
+
     setSyncStatus('ok');
   } catch (e) {
     setSyncStatus('error');
@@ -4293,6 +4435,7 @@ async function setupBudgetSheet() {
     await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFunds!A1',    [['Category','IsActive','ActiveFrom','RunningBalance']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'TrackerBudgets!A1',  [['Month','Category','Amount']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     [['Key','Label','YearMonth']]);
+    await clearAndWrite(BUDGET_SHEET_ID, 'SkippedTxns!A1',     [['PlaidTxnId','Merchant','Amount','Date','SkippedAt']]);
     await setupIncomeTab();
     await setupWindfallTab();
     await setupWindfallLogTab();
@@ -4301,6 +4444,7 @@ async function setupBudgetSheet() {
     throw e;
   }
 }
+
 
 async function setupIncomeTab() {
   await clearAndWrite(BUDGET_SHEET_ID, 'Income!A1', [
