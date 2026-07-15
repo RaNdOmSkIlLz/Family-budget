@@ -412,6 +412,12 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:var(--text)}
   <button id="loadingSignOutBtn" onclick="forceSignOut()" style="display:none;margin-top:16px;background:var(--muted-chip);color:var(--text);border:none;border-radius:12px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">Sign out and try again</button>
 </div>
 
+<!-- RECONNECT BANNER -->
+<div id="reconnectBanner" style="display:none;position:fixed;left:0;right:0;bottom:0;z-index:500;background:#ff9500;color:#1c1c1e;padding:12px 16px;padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:600;box-shadow:0 -4px 16px rgba(0,0,0,.2)">
+  <span>Your session expired — reconnect to keep saving changes.</span>
+  <button onclick="reconnectClicked()" style="background:#1c1c1e;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0">Reconnect</button>
+</div>
+
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none">
   <div class="app-header">
@@ -4277,24 +4283,51 @@ function requestToken(mode, onSuccess, onFail) {
       if (resp.error) { if (onFail) onFail(new Error(resp.error)); return; }
       accessToken = resp.access_token;
       localStorage.setItem('gv_token', accessToken);
-      scheduleTokenRefresh(resp.expires_in);
+      hideReconnectBanner();
+      scheduleExpiryWarning(resp.expires_in);
       if (onSuccess) onSuccess();
     }
   });
   tokenClient.requestAccessToken({prompt: mode});
 }
 
-// Proactively refresh a couple minutes before the access token expires (Google
-// tokens typically last ~1hr), so the person is far less likely to ever see a
-// 401 or get bounced back to the sign-in screen mid-session.
-let tokenRefreshTimer = null;
-function scheduleTokenRefresh(expiresInSeconds) {
-  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+// IMPORTANT: browsers only allow a popup (which is how Google's token client
+// works, even in "silent" mode) to open during the synchronous execution of a
+// real user gesture like a click. A background timer or an automatic retry
+// after a failed request does NOT count, and the popup gets silently blocked
+// every time — that produced the "Failed to open popup window" console error.
+// So instead of ever calling requestToken() on our own from a timer or retry,
+// we just track when the token is expiring and show a banner with a real
+// button — clicking that button IS a genuine gesture, so it reliably works.
+let tokenExpiryTimer = null;
+function scheduleExpiryWarning(expiresInSeconds) {
+  if (tokenExpiryTimer) clearTimeout(tokenExpiryTimer);
   const ms = Math.max(30000, ((expiresInSeconds || 3600) - 120) * 1000);
-  tokenRefreshTimer = setTimeout(() => {
-    requestToken('', () => console.log('[auth] token silently refreshed'),
-                      () => console.log('[auth] silent refresh failed — will retry on next request'));
-  }, ms);
+  tokenExpiryTimer = setTimeout(showReconnectBanner, ms);
+}
+
+function showReconnectBanner() {
+  const b = document.getElementById('reconnectBanner');
+  if (b) b.style.display = 'flex';
+}
+function hideReconnectBanner() {
+  const b = document.getElementById('reconnectBanner');
+  if (b) b.style.display = 'none';
+}
+
+function reconnectClicked() {
+  const btn = document.querySelector('#reconnectBanner button');
+  if (btn) { btn.textContent = 'Reconnecting...'; btn.disabled = true; }
+  requestToken('',
+    () => { if (btn) { btn.textContent = 'Reconnect'; btn.disabled = false; } },
+    () => {
+      // Silent attempt failed even with a real click behind it (e.g. consent
+      // was revoked) — fall back to the full sign-in flow, which always works
+      // from a click since it shows the normal consent screen if needed.
+      if (btn) { btn.textContent = 'Reconnect'; btn.disabled = false; }
+      signIn();
+    }
+  );
 }
 
 function signIn() {
@@ -4320,7 +4353,8 @@ function signIn() {
 }
 
 function signOut() {
-  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  if (tokenExpiryTimer) clearTimeout(tokenExpiryTimer);
+  hideReconnectBanner();
   if (accessToken && typeof google !== 'undefined') google.accounts.oauth2.revoke(accessToken);
   accessToken = null;
   localStorage.removeItem('gv_token');
@@ -4329,27 +4363,26 @@ function signOut() {
 }
 
 function forceSignOut() {
-  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  if (tokenExpiryTimer) clearTimeout(tokenExpiryTimer);
   accessToken = null;
   localStorage.removeItem('gv_token');
   location.reload();
 }
 // ── SHEETS API ────────────────────────────────────────────────────────────────
-async function gapi(method, url, body, _isRetry) {
+async function gapi(method, url, body) {
   const r = await fetch(url, {
     method,
     headers: {'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json'},
     body: body ? JSON.stringify(body) : undefined
   });
 
-  if ((r.status === 401 || r.status === 403) && !_isRetry) {
-    // Token likely expired mid-session. Try one silent refresh (no visible
-    // prompt if the browser still has an active Google session) and retry
-    // this exact request once before giving up.
-    const refreshed = await new Promise(resolve => {
-      requestToken('', () => resolve(true), () => resolve(false));
-    });
-    if (refreshed) return gapi(method, url, body, true);
+  if (r.status === 401 || r.status === 403) {
+    // Token expired mid-session. We deliberately do NOT try to silently reopen
+    // the Google popup here — this code path can run at any time (a save
+    // triggered from a timer, a background sync, etc.), not just in direct
+    // response to a click, and browsers block popups outside a real user
+    // gesture. Surface a banner with a real button instead.
+    showReconnectBanner();
   }
 
   if (!r.ok) {
@@ -4888,28 +4921,15 @@ const DEFAULT_PLAN_DATA = [
     try {
       await initApp();
     } catch (e) {
-      // Saved token likely expired. Before bouncing to the sign-in screen, try a
-      // silent refresh — if the browser still has an active Google session and
-      // consent was already granted, this can succeed with no visible prompt at all.
-      setLoading('Refreshing session...');
-      requestToken('',
-        async () => {
-          try {
-            await initApp();
-          } catch (e2) {
-            accessToken = null;
-            localStorage.removeItem('gv_token');
-            document.getElementById('loadingScreen').style.display = 'none';
-            document.getElementById('authScreen').style.display = 'block';
-          }
-        },
-        () => {
-          accessToken = null;
-          localStorage.removeItem('gv_token');
-          document.getElementById('loadingScreen').style.display = 'none';
-          document.getElementById('authScreen').style.display = 'block';
-        }
-      );
+      // Saved token expired. We can't silently reopen the Google popup here —
+      // this runs on page load, not in response to a click, so the browser
+      // would just block it (same reason the reconnect banner uses a real
+      // button instead of trying automatically). Simplest reliable path is
+      // just showing the normal sign-in screen — one click and they're back in.
+      accessToken = null;
+      localStorage.removeItem('gv_token');
+      document.getElementById('loadingScreen').style.display = 'none';
+      document.getElementById('authScreen').style.display = 'block';
     }
   }
 })();
