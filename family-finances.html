@@ -2045,12 +2045,16 @@ async function syncPlaidTransactions() {
     const monthEnd   = new Date(mo.year, mo.month, 0, 23, 59, 59);
 
     const normMerchant = s => (s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').substring(0, 10);
-    const confirmedFingerprints = new Set();
+    const confirmedFingerprints = [];
     budgetPlan.forEach(cat => {
       getTxns(trackerIdx, cat.Category).forEach(t => {
-        confirmedFingerprints.add(`${normMerchant(t.desc)}|${Math.abs(t.amt).toFixed(2)}`);
+        confirmedFingerprints.push({merchant: normMerchant(t.desc), amt: Math.abs(t.amt)});
       });
     });
+    // ACH/bill-pay amounts (e.g. utilities) can drift a few cents between the pending
+    // authorization and the final posted amount, so allow a small tolerance here.
+    const fpMatches = (merchant, amt) =>
+      confirmedFingerprints.some(fp => fp.merchant === merchant && Math.abs(fp.amt - amt) <= 1.00);
 
     pendingTxns = (transactions || [])
       .filter(t => {
@@ -2064,9 +2068,9 @@ async function syncPlaidTransactions() {
           return false;
         }
         if (!t.pending) {
-          const fp1 = `${normMerchant(t.merchant_name)}|${t.amount.toFixed(2)}`;
-          const fp2 = `${normMerchant(t.name)}|${t.amount.toFixed(2)}`;
-          if (confirmedFingerprints.has(fp1) || confirmedFingerprints.has(fp2)) return false;
+          const m1 = normMerchant(t.merchant_name);
+          const m2 = normMerchant(t.name);
+          if (fpMatches(m1, t.amount) || fpMatches(m2, t.amount)) return false;
         }
         return true;
       })
@@ -2538,9 +2542,36 @@ function onPendingCatChange(idx, selectEl) {
   if (selectEl.value && selectEl.value !== txn.suggestedCat) confirmPendingTxn(idx);
 }
 
+function findPossibleDuplicate(amount, dateStr) {
+  const target = new Date(dateStr + 'T12:00:00');
+  const tolAmt = Math.max(1, amount * 0.02); // within $1 or 2%, whichever is larger
+  let match = null;
+  Object.values(trackerData.transactions).forEach(cats => {
+    Object.entries(cats).forEach(([cat, txns]) => {
+      txns.forEach(t => {
+        if (match || !t.ts) return;
+        const dayDiff = Math.abs((target - new Date(t.ts)) / 86400000);
+        if (dayDiff <= 7 && Math.abs(Math.abs(t.amt) - amount) <= tolAmt) {
+          match = {cat, desc: t.desc, amt: t.amt, ts: t.ts};
+        }
+      });
+    });
+  });
+  return match;
+}
+
 function confirmPendingTxn(idx) {
   const txn = pendingTxns[idx];
   if (!txn) return;
+  const dup = findPossibleDuplicate(txn.amount, txn.date);
+  if (dup) {
+    const dupDate = new Date(dup.ts).toLocaleDateString('en-US', {month:'short', day:'numeric'});
+    const proceed = confirm(
+      `Possible duplicate:\n\n"${dup.desc}" — $${Math.abs(dup.amt).toFixed(2)} on ${dupDate} (${dup.cat})\n\nis very close to this transaction ($${txn.amount.toFixed(2)}). ` +
+      `This can happen when Chase reposts a bill payment with a new ID.\n\nAdd it anyway?`
+    );
+    if (!proceed) return;
+  }
   if (txn.splits && txn.splits.length > 0) {
     const total = txn.splits.reduce((s, sp) => s + (parseFloat(sp.amt) || 0), 0);
     if (Math.abs(total - txn.amount) > 0.02) {
