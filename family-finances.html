@@ -1308,7 +1308,14 @@ function trDrawSankey(idx, sections) {
   const labelCol = isLight ? '#6e6e73' : '#9698b8';
   const firstAmtCol = isLight ? '#1c1c1e' : '#ffffff';
   const hovLabelCol = isLight ? '#1c1c1e' : '#ffffff';
-  const PAD_L = isNarrow ? 54 : 110, PAD_R = isNarrow ? 74 : 180, PAD_T = 14, PAD_B = 14;
+  // The last column's labels only actually render when nodes are tall enough —
+  // with more levels (e.g. drilling to individual Transactions), that column is
+  // packed with dozens of thin nodes and almost never shows text, so reserving
+  // full label width for it just wastes screen space. Shrink it as levels grow.
+  const manyLevels = levels >= 4;
+  const PAD_L = isNarrow ? 54 : 110;
+  const PAD_R = isNarrow ? (manyLevels ? 32 : 74) : (manyLevels ? 90 : 180);
+  const PAD_T = 14, PAD_B = 14;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
 
