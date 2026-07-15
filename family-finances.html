@@ -17,17 +17,38 @@
 <meta http-equiv="Expires" content="0">
 <script src="https://accounts.google.com/gsi/client"></script>
 <style>
+
+:root{
+  --page-bg:#0d1021; --surface:#161929; --surface-alt:#111424;
+  --border:#252840; --border-soft:#1a1e2a; --border-hover:#353860;
+  --text:#e8e9ed; --text-dim:#9698b0; --text-faint:#555878;
+  --input-bg:#161929; --muted-chip:#1a1e35;
+  --tint-amber-bg:#2a2410; --tint-amber-text:#f5c542;
+  --tint-green-bg:#0f2016; --tint-green-text:#34d47c;
+  --tint-blue-bg:#0f1d2e; --tint-blue-text:#7b9fff;
+  --shadow:rgba(0,0,0,.35);
+}
+body.light-theme{
+  --page-bg:#f2f2f7; --surface:#ffffff; --surface-alt:#f9f9f9;
+  --border:#d1d1d6; --border-soft:#f2f2f7; --border-hover:#c7c7cc;
+  --text:#1c1c1e; --text-dim:#6e6e73; --text-faint:#8e8e93;
+  --input-bg:#ffffff; --muted-chip:#f2f2f7;
+  --tint-amber-bg:#fff9e6; --tint-amber-text:#9a6700;
+  --tint-green-bg:#f0fff4; --tint-green-text:#1a7f37;
+  --tint-blue-bg:#e8f4ff; --tint-blue-text:#0055cc;
+  --shadow:rgba(0,0,0,.12);
+}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f2f2f7;color:#1c1c1e;padding:0 16px 48px}
-h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
-.subtitle{font-size:13px;color:#6e6e73;margin-bottom:14px}
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:var(--page-bg);color:var(--text);padding:0 16px 48px;transition:background .2s,color .2s}
+h1{font-size:17px;font-weight:700;margin-bottom:0;color:var(--text)}
+.subtitle{font-size:13px;color:var(--text-dim);margin-bottom:14px}
 /* APP HEADER (sticky, dark, consistent across every tab) */
-.app-header{position:sticky;top:0;left:0;right:0;z-index:20;background:#0d1021;margin:0 -16px;padding:calc(env(safe-area-inset-top, 0px) + 10px) 16px 0}
+.app-header{position:sticky;top:0;left:0;right:0;z-index:20;background:var(--page-bg);margin:0 -16px;padding:calc(env(safe-area-inset-top, 0px) + 10px) 16px 0;border-bottom:1px solid var(--border)}
 .sync-bar{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 /* TABS */
 .tabs{display:flex;gap:6px;margin-bottom:0;padding-bottom:10px;overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{flex-shrink:0;padding:6px 12px;border-radius:20px;border:1.5px solid #2a3060;background:transparent;font-size:12.5px;font-weight:500;color:#8890b0;cursor:pointer;white-space:nowrap}
+.tab{flex-shrink:0;padding:6px 12px;border-radius:20px;border:1.5px solid var(--border);background:transparent;font-size:12.5px;font-weight:500;color:var(--text-dim);cursor:pointer;white-space:nowrap}
 .tab.active{background:#007aff;border-color:#007aff;color:#fff}
 .view{display:none}.view.active{display:block}
 #tracker{position:relative}
@@ -35,76 +56,76 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 /* AUTH */
 #authScreen{text-align:center;padding:40px 20px}
 #authScreen h2{font-size:20px;font-weight:600;margin-bottom:12px}
-#authScreen p{font-size:14px;color:#6e6e73;margin-bottom:24px;line-height:1.6}
+#authScreen p{font-size:14px;color:var(--text-dim);margin-bottom:24px;line-height:1.6}
 .btn-primary{background:#007aff;color:#fff;border:none;border-radius:14px;padding:14px 32px;font-size:16px;font-weight:600;cursor:pointer;width:100%}
-.btn-secondary{background:#f2f2f7;color:#3a3a3c;border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer}
+.btn-secondary{background:var(--muted-chip);color:var(--text);border:none;border-radius:10px;padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer}
 /* LOADING */
 #loadingScreen{text-align:center;padding:60px 20px;display:none}
 .spinner{width:36px;height:36px;border:3px solid #e5e5ea;border-top-color:#007aff;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 16px}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* SYNC BAR */
-.sync-info{display:flex;align-items:center;gap:6px;font-size:12px;color:#9698b0}
+.sync-info{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-dim)}
 .sync-dot{width:8px;height:8px;border-radius:50%;background:#34c759;flex-shrink:0}
 .sync-dot.syncing{background:#ff9500;animation:pulse 1s infinite}
 .sync-dot.error{background:#ff3b30}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 /* MONTH NAV */
 .month-nav{display:flex;align-items:center;gap:6px;margin-bottom:16px}
-.month-chevron{background:#fff;border:1.5px solid #d1d1d6;border-radius:20px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;color:#3a3a3c}
+.month-chevron{background:var(--surface);border:1.5px solid var(--border);border-radius:20px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;flex-shrink:0;color:var(--text)}
 .month-chevron:disabled{opacity:.3;cursor:default}
 .month-scroll{display:flex;gap:6px;overflow:hidden;flex:1}
-.month-btn{flex-shrink:0;padding:7px 12px;border-radius:20px;border:1.5px solid #d1d1d6;background:#fff;font-size:12px;font-weight:500;color:#3a3a3c;cursor:pointer;white-space:nowrap}
+.month-btn{flex-shrink:0;padding:7px 12px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface);font-size:12px;font-weight:500;color:var(--text);cursor:pointer;white-space:nowrap}
 .month-btn.active{background:#007aff;border-color:#007aff;color:#fff}
 .month-btn.past{opacity:.6}
 .add-month-btn{flex-shrink:0;padding:7px 12px;border-radius:20px;border:1.5px dashed #007aff;background:transparent;font-size:12px;font-weight:500;color:#007aff;cursor:pointer;white-space:nowrap}
 /* CARDS */
 .cards{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
-.card{background:#fff;border-radius:12px;padding:12px 10px;text-align:center}
+.card{background:var(--surface);border-radius:12px;padding:12px 10px;text-align:center}
 .card4{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.card2{background:#fff;border-radius:12px;padding:14px 12px}
+.card2{background:var(--surface);border-radius:12px;padding:14px 12px}
 .card2.full{grid-column:1/-1}
-.card-label{font-size:11px;color:#6e6e73;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
+.card-label{font-size:11px;color:var(--text-dim);margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em}
 .card-value{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
-.card-sub{font-size:12px;color:#8e8e93;margin-top:3px}
+.card-sub{font-size:12px;color:var(--text-faint);margin-top:3px}
 /* COLORS */
 .green{color:#34c759}.blue{color:#007aff}.orange{color:#ff9500}.purple{color:#af52de}.red{color:#ff3b30}
 /* SECTIONS */
-.section{background:#fff;border-radius:14px;margin-bottom:14px;overflow:visible}
-.block{background:#fff;border-radius:14px;margin-bottom:14px;overflow:hidden}
-.sec-hdr,.block-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid #f2f2f7;border-radius:14px 14px 0 0}
+.section{background:var(--surface);border-radius:14px;margin-bottom:14px;overflow:visible}
+.block{background:var(--surface);border-radius:14px;margin-bottom:14px;overflow:hidden}
+.sec-hdr,.block-header{display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border-soft);border-radius:14px 14px 0 0}
 .sec-accent,.accent{width:4px;height:20px;border-radius:2px;flex-shrink:0}
-.sec-title,.block-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#3a3a3c}
+.sec-title,.block-title{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--text)}
 .block-title{text-transform:none;font-size:14px}
 .sec-meta{margin-left:auto;display:flex;align-items:center;gap:8px}
 .badge{font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px}
-.badge-green{background:#d1f4d9;color:#1a7f37}.badge-orange{background:#fff3cd;color:#9a6700}
-.badge-blue{background:#ddeeff;color:#0055cc}.badge-purple{background:#f0e6ff;color:#6600cc}
+.badge-green{background:#d1f4d9;color:var(--tint-green-text)}.badge-orange{background:var(--surface)3cd;color:var(--tint-amber-text)}
+.badge-blue{background:#ddeeff;color:var(--tint-blue-text)}.badge-purple{background:#f0e6ff;color:#6600cc}
 /* CATEGORY ROW */
-.cat-row{border-bottom:1px solid #f9f9f9;background:#fff;position:relative}
+.cat-row{border-bottom:1px solid var(--border-soft);background:var(--surface);position:relative}
 .cat-row:last-child{border-bottom:none}
-.cat-row.closed-row{background:#fafafa}
-.cat-row.sinking-row{background:#f6fff8}
+.cat-row.closed-row{background:var(--surface-alt)}
+.cat-row.sinking-row{background:var(--tint-green-bg)}
 .cat-header{display:flex;align-items:center;padding:10px 16px;gap:8px;cursor:pointer;user-select:none}
-.cat-chevron{font-size:13px;color:#8e8e93;transition:transform .2s;flex-shrink:0}
+.cat-chevron{font-size:13px;color:var(--text-faint);transition:transform .2s;flex-shrink:0}
 .cat-chevron.open{transform:rotate(180deg)}
-.cat-name{flex:1;font-size:14px;font-weight:500;color:#1c1c1e}
+.cat-name{flex:1;font-size:14px;font-weight:500;color:var(--text)}
 .cat-badges{display:flex;gap:4px;flex-shrink:0}
 .flag{font-size:10px;padding:2px 5px;border-radius:6px;font-weight:600}
-.flag-sf{background:#d1f4d9;color:#1a7f37}
-.flag-closed{background:#e5e5ea;color:#6e6e73}
+.flag-sf{background:#d1f4d9;color:var(--tint-green-text)}
+.flag-closed{background:var(--border);color:var(--text-dim)}
 .flag-over{background:#ffe0e0;color:#c0392b}
-.txn-count{font-size:10px;background:#f2f2f7;color:#6e6e73;padding:2px 6px;border-radius:8px;font-weight:600}
+.txn-count{font-size:10px;background:var(--muted-chip);color:var(--text-dim);padding:2px 6px;border-radius:8px;font-weight:600}
 .cat-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
-.cat-budget-input{font-size:12px;color:#8e8e93;font-variant-numeric:tabular-nums;background:none;border:none;text-align:right;width:72px;cursor:pointer;padding:0}
-.cat-budget-input:focus{background:#f2f2f7;border-radius:6px;outline:none;color:#1c1c1e;padding:2px 4px}
+.cat-budget-input{font-size:12px;color:var(--text-faint);font-variant-numeric:tabular-nums;background:none;border:none;text-align:right;width:72px;cursor:pointer;padding:0}
+.cat-budget-input:focus{background:var(--muted-chip);border-radius:6px;outline:none;color:var(--text);padding:2px 4px}
 .cat-actual{font-size:15px;font-weight:600;font-variant-numeric:tabular-nums}
 .cat-var{font-size:11px;font-weight:600;font-variant-numeric:tabular-nums}
-.var-over{color:#ff3b30}.var-under{color:#34c759}.var-exact{color:#8e8e93}
+.var-over{color:#ff3b30}.var-under{color:#34c759}.var-exact{color:var(--text-faint)}
 /* CAT BODY */
 .cat-body{display:none;border-top:1px solid #f9f9f9;position:relative;z-index:1}
 .cat-body.open{display:block}
 /* PROGRESS BAR */
-.cat-bar{height:3px;background:#e5e5ea;margin:0 16px}
+.cat-bar{height:3px;background:var(--border);margin:0 16px}
 .cat-bar-fill{height:100%;border-radius:2px;transition:width .3s}
 /* CAT ACTIONS */
 .cat-actions{display:flex;align-items:center;justify-content:space-between;padding:8px 16px;gap:8px}
@@ -112,42 +133,42 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 .cat-actions-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
 .btn-xs{padding:5px 11px;border-radius:8px;border:none;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .btn-add{background:#007aff;color:#fff}
-.btn-spent{background:#e5e5ea;color:#6e6e73;font-size:11px;padding:4px 10px}
+.btn-spent{background:var(--border);color:var(--text-dim);font-size:11px;padding:4px 10px}
 .btn-spent.done{background:#34c759;color:#fff}
 .btn-cover{background:#ff9500;color:#fff}
 /* THREE DOT MENU */
 .menu-wrap{position:relative}
-.btn-menu{background:none;border:none;font-size:18px;color:#8e8e93;cursor:pointer;padding:0 4px;line-height:1}
-.dropdown{display:none;position:absolute;right:0;top:24px;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:180px;z-index:200;overflow:hidden}
+.btn-menu{background:none;border:none;font-size:18px;color:var(--text-faint);cursor:pointer;padding:0 4px;line-height:1}
+.dropdown{display:none;position:absolute;right:0;top:24px;background:var(--surface);border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.15);min-width:180px;z-index:200;overflow:hidden}
 .dropdown.open{display:block}
-.dd-item{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:#1c1c1e;cursor:pointer;border-bottom:1px solid #f2f2f7}
+.dd-item{display:flex;align-items:center;gap:10px;padding:12px 16px;font-size:14px;color:var(--text);cursor:pointer;border-bottom:1px solid var(--border-soft)}
 .dd-item:last-child{border-bottom:none}
-.dd-item:hover{background:#f9f9f9}
+.dd-item:hover{background:var(--surface-alt)}
 .dd-icon{font-size:16px;width:20px;text-align:center}
 /* TRANSACTIONS */
 .txn-list{padding:4px 16px 10px;position:relative;z-index:2}
-.txn{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f9f9f9;font-size:13px}
+.txn{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
 .txn:last-child{border-bottom:none}
-.txn-icon{font-size:10px;padding:2px 5px;border-radius:5px;background:#f2f2f7;color:#6e6e73;flex-shrink:0}
-.txn-desc{flex:1;color:#3a3a3c}
+.txn-icon{font-size:10px;padding:2px 5px;border-radius:5px;background:var(--muted-chip);color:var(--text-dim);flex-shrink:0}
+.txn-desc{flex:1;color:var(--text)}
 .txn-amt{font-weight:500;font-variant-numeric:tabular-nums}
 .txn-del{background:none;border:none;color:#ff3b30;font-size:16px;cursor:pointer;padding:0 2px;flex-shrink:0}
-.sub-note{font-size:11px;padding:4px 16px 8px;color:#8e8e93}
+.sub-note{font-size:11px;padding:4px 16px 8px;color:var(--text-faint)}
 .sub-note.good{color:#34c759}.sub-note.warn{color:#ff9500}
 /* BANNERS */
-.surplus-banner{background:#fff9e6;border-left:4px solid #ff9500;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#9a6700;line-height:1.5}
-.raise-banner{background:#f0fff4;border-left:4px solid #34c759;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1a7f37}
+.surplus-banner{background:var(--tint-amber-bg);border-left:4px solid #ff9500;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--tint-amber-text);line-height:1.5}
+.raise-banner{background:var(--tint-green-bg);border-left:4px solid #34c759;border-radius:0 10px 10px 0;padding:10px 14px;margin-bottom:14px;font-size:13px;color:var(--tint-green-text)}
 /* MODALS */
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:100;align-items:flex-end;justify-content:center}
 .modal-bg.open{display:flex}
-.modal{background:#fff;border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto}
+.modal{background:var(--surface);border-radius:20px 20px 0 0;padding:20px;width:100%;max-width:500px;max-height:85vh;overflow-y:auto}
 .modal h3{font-size:17px;font-weight:600;margin-bottom:16px}
-.modal label{font-size:13px;color:#6e6e73;display:block;margin-bottom:4px;margin-top:10px}
-.modal input,.modal select{width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:16px;outline:none;background:#fff}
+.modal label{font-size:13px;color:var(--text-dim);display:block;margin-bottom:4px;margin-top:10px}
+.modal input,.modal select{width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:16px;outline:none;background:var(--surface)}
 .modal input:focus,.modal select:focus{border-color:#007aff}
 .modal-btns{display:flex;gap:10px;margin-top:16px}
 .modal-btns button{flex:1;padding:12px;border-radius:12px;border:none;font-size:15px;font-weight:600;cursor:pointer}
-.btn-cancel{background:#f2f2f7;color:#3a3a3c}
+.btn-cancel{background:var(--muted-chip);color:var(--text)}
 .btn-save{background:#007aff;color:#fff}
 /* SPLIT ROWS */
 .split-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
@@ -156,152 +177,152 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 .split-row button{background:none;border:none;color:#ff3b30;font-size:20px;cursor:pointer;flex-shrink:0;padding:0 2px}
 .split-remaining{font-size:13px;font-weight:600;text-align:right;margin-bottom:10px}
 /* MISC */
-.note{background:#fff9e6;border-left:4px solid #ff9500;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#3a3a3c;line-height:1.6}
-.note b{color:#9a6700}
-.note-blue{background:#e8f4ff;border-left:4px solid #007aff;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#3a3a3c;line-height:1.6}
-.note-blue b{color:#0055cc}
-.note-green{background:#f0fff4;border-left:4px solid #34c759;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:#3a3a3c;line-height:1.6}
-.note-green b{color:#1a7f37}
-.divider{font-size:11px;color:#8e8e93;text-transform:uppercase;letter-spacing:.05em;padding:4px 0 8px;font-weight:600}
-.row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #f2f2f7}
+.note{background:var(--tint-amber-bg);border-left:4px solid #ff9500;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--text);line-height:1.6}
+.note b{color:var(--tint-amber-text)}
+.note-blue{background:var(--tint-blue-bg);border-left:4px solid #007aff;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--text);line-height:1.6}
+.note-blue b{color:var(--tint-blue-text)}
+.note-green{background:var(--tint-green-bg);border-left:4px solid #34c759;border-radius:0 10px 10px 0;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--text);line-height:1.6}
+.note-green b{color:var(--tint-green-text)}
+.divider{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.05em;padding:4px 0 8px;font-weight:600}
+.row{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border-soft)}
 .row:last-child{border-bottom:none}
-.row-label{font-size:15px;color:#3a3a3c}
-.row-sub{font-size:12px;color:#8e8e93;margin-top:2px}
+.row-label{font-size:15px;color:var(--text)}
+.row-sub{font-size:12px;color:var(--text-faint);margin-top:2px}
 .row-val{font-size:15px;font-weight:500;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.row-val-sub{font-size:12px;color:#8e8e93;margin-top:2px;text-align:right}
-.alloc-total{display:flex;justify-content:space-between;padding:14px 16px;background:#f2f2f7;font-weight:600;font-size:15px}
+.row-val-sub{font-size:12px;color:var(--text-faint);margin-top:2px;text-align:right}
+.alloc-total{display:flex;justify-content:space-between;padding:14px 16px;background:var(--muted-chip);font-weight:600;font-size:15px}
 /* RETIREMENT */
 .ret-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
-.ret-card{background:#fff;border-radius:12px;padding:12px 8px;text-align:center}
-.ret-age{font-size:11px;color:#6e6e73;margin-bottom:4px}
+.ret-card{background:var(--surface);border-radius:12px;padding:12px 8px;text-align:center}
+.ret-age{font-size:11px;color:var(--text-dim);margin-bottom:4px}
 .ret-val{font-size:15px;font-weight:700;color:#007aff}
 .progress-wrap{padding:0 16px 14px}
-.progress-labels{display:flex;justify-content:space-between;font-size:12px;color:#8e8e93;margin-bottom:4px}
-.bar-bg2{background:#e5e5ea;border-radius:6px;height:8px;overflow:hidden}
-.ss-btn{flex:1;padding:8px 4px;border-radius:10px;border:1.5px solid #d1d1d6;background:#fff;font-size:14px;font-weight:500;color:#3a3a3c;cursor:pointer}
+.progress-labels{display:flex;justify-content:space-between;font-size:12px;color:var(--text-faint);margin-bottom:4px}
+.bar-bg2{background:var(--border);border-radius:6px;height:8px;overflow:hidden}
+.ss-btn{flex:1;padding:8px 4px;border-radius:10px;border:1.5px solid var(--border);background:var(--surface);font-size:14px;font-weight:500;color:var(--text);cursor:pointer}
 .ss-btn.ss-active{background:#007aff;border-color:#007aff;color:#fff}
 /* BUDGET OVERVIEW DASHBOARD */
-.tr-layout{display:flex;height:100%;overflow:hidden;background:#0d1021}
-.tr-sidebar{width:220px;background:#111424;border-right:1px solid #252840;display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:#252840 transparent}
-.tr-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#0d1021;min-width:0}
-.tr-sum-bar{display:flex;align-items:stretch;background:#161929;border-bottom:1px solid #252840;height:52px;flex-shrink:0}
-.tr-sum-item{display:flex;flex-direction:column;padding:0 18px;border-right:1px solid #252840;justify-content:center;min-width:110px}
-.tr-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#4f5880;margin-bottom:2px}
+.tr-layout{display:flex;height:100%;overflow:hidden;background:var(--page-bg)}
+.tr-sidebar{width:220px;background:var(--surface-alt);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;overflow-y:auto;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
+.tr-main{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--page-bg);min-width:0}
+.tr-sum-bar{display:flex;align-items:stretch;background:var(--surface);border-bottom:1px solid var(--border);height:52px;flex-shrink:0}
+.tr-sum-item{display:flex;flex-direction:column;padding:0 18px;border-right:1px solid var(--border);justify-content:center;min-width:110px}
+.tr-sum-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-faint);margin-bottom:2px}
 .tr-sum-value{font-size:15px;font-weight:800;letter-spacing:-.3px}
 .tr-sum-bar-item{flex:1;padding:0 16px;display:flex;align-items:center;gap:10px;min-width:0}
-.tr-sum-progress{flex:1;height:5px;background:#252840;border-radius:3px;overflow:hidden}
+.tr-sum-progress{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
 .tr-sum-fill{height:100%;background:linear-gradient(90deg,#4f6ef7,#a855f7);border-radius:3px;transition:width .3s}
-.tr-sum-actions{display:flex;gap:6px;padding:0 14px;margin-left:auto;align-items:center;flex-shrink:0;border-left:1px solid #252840}
+.tr-sum-actions{display:flex;gap:6px;padding:0 14px;margin-left:auto;align-items:center;flex-shrink:0;border-left:1px solid var(--border)}
 .tr-btn-primary{padding:6px 14px;background:#4f6ef7;color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
-.tr-btn-ghost{padding:6px 14px;background:transparent;color:#7b8fd4;border:1px solid #2a3060;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tr-btn-ghost{padding:6px 14px;background:transparent;color:#7b8fd4;border:1px solid var(--border);border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 /* Sidebar internals */
 .tr-sb-section{padding:10px 14px 4px}
-.tr-sb-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878;display:block;margin-bottom:5px}
+.tr-sb-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint);display:block;margin-bottom:5px}
 .tr-month-sel{display:flex;gap:3px;flex-wrap:wrap;margin-bottom:2px}
-.tr-msel{padding:3px 8px;border-radius:6px;border:1px solid #252840;background:transparent;font-size:11px;font-weight:500;color:#555878;cursor:pointer;white-space:nowrap}
+.tr-msel{padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:transparent;font-size:11px;font-weight:500;color:var(--text-faint);cursor:pointer;white-space:nowrap}
 .tr-msel.active{background:#4f6ef7;border-color:#4f6ef7;color:#fff}
 .tr-month-chevrons{display:flex;gap:4px;margin-top:4px}
-.tr-mchev{background:#1a1e35;border:1px solid #252840;border-radius:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:#9698b0}
+.tr-mchev{background:var(--muted-chip);border:1px solid var(--border);border-radius:6px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--text-dim)}
 .tr-mchev:disabled{opacity:.3;cursor:default}
 .tr-sec-nav{display:flex;align-items:center;gap:8px;padding:7px 14px;cursor:pointer;border-left:3px solid transparent;transition:all .15s}
-.tr-sec-nav:hover{background:#1a1e35}
-.tr-sec-nav.active{background:#1a1e35;border-left-color:var(--tc)}
+.tr-sec-nav:hover{background:var(--muted-chip)}
+.tr-sec-nav.active{background:var(--muted-chip);border-left-color:var(--tc)}
 .tr-sec-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
-.tr-sec-name{flex:1;font-size:12px;font-weight:500;color:#8890b0}
-.tr-sec-nav.active .tr-sec-name{color:#e8e9ed;font-weight:600}
+.tr-sec-name{flex:1;font-size:12px;font-weight:500;color:var(--text-dim)}
+.tr-sec-nav.active .tr-sec-name{color:var(--text);font-weight:600}
 .tr-sec-stat{font-size:10px;font-weight:700}
-.tr-sec-mini{height:2px;background:#252840;margin:0 14px 2px;border-radius:1px}
+.tr-sec-mini{height:2px;background:var(--border);margin:0 14px 2px;border-radius:1px}
 .tr-sec-mini-fill{height:100%;border-radius:1px}
-.tr-sb-footer{padding:10px 14px;border-top:1px solid #252840;margin-top:auto}
-.tr-overall-bar{height:5px;background:#252840;border-radius:3px;overflow:hidden;display:flex;margin:4px 0}
+.tr-sb-footer{padding:10px 14px;border-top:1px solid var(--border);margin-top:auto}
+.tr-overall-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;display:flex;margin:4px 0}
 .tr-overall-seg{height:100%}
 /* Sankey panel */
-.tr-sankey-panel{background:#111424;border-bottom:1px solid #252840;padding:14px 20px 10px;flex-shrink:0}
+.tr-sankey-panel{background:var(--surface-alt);border-bottom:1px solid var(--border);padding:14px 20px 10px;flex-shrink:0}
 .tr-sankey-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
-.tr-sankey-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
+.tr-sankey-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint)}
 .tr-depth-btns{display:flex;gap:3px}
-.tr-dbtn{padding:2px 9px;border-radius:5px;border:1px solid #252840;background:transparent;font-size:10px;color:#555878;cursor:pointer;font-weight:500}
+.tr-dbtn{padding:2px 9px;border-radius:5px;border:1px solid var(--border);background:transparent;font-size:10px;color:var(--text-faint);cursor:pointer;font-weight:500}
 .tr-dbtn.active{background:#4f6ef7;border-color:#4f6ef7;color:#fff}
 #trSankeyCanvas{display:block;width:100%}
 /* Section detail */
-.tr-sec-detail{flex:1;overflow-y:auto;padding:16px 20px;scrollbar-width:thin;scrollbar-color:#252840 transparent}
+.tr-sec-detail{flex:1;overflow-y:auto;padding:16px 20px;scrollbar-width:thin;scrollbar-color:var(--border) transparent}
 .tr-sec-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px}
 .tr-sec-hdr-left{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
 .tr-sec-title{font-size:22px;font-weight:800;margin-bottom:2px}
-.tr-sec-sub{font-size:11px;color:#555878}
+.tr-sec-sub{font-size:11px;color:var(--text-faint)}
 .tr-sec-stats{display:flex;gap:20px;align-items:center}
 .tr-hs{text-align:left}
 .tr-hs-val{font-size:20px;font-weight:800;letter-spacing:-.5px}
-.tr-hs-lbl{font-size:10px;color:#555878;margin-top:2px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
+.tr-hs-lbl{font-size:10px;color:var(--text-faint);margin-top:2px;text-transform:uppercase;letter-spacing:.06em;font-weight:600}
 /* Cat cards */
 .tr-cat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:12px}
-.tr-cat-card{background:#161929;border-radius:11px;padding:14px;border:1.5px solid #252840;cursor:pointer;transition:all .2s;position:relative}
-.tr-cat-card:hover{border-color:#353860;transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.tr-cat-card{background:var(--surface);border-radius:11px;padding:14px;border:1.5px solid var(--border);cursor:pointer;transition:all .2s;position:relative}
+.tr-cat-card:hover{border-color:var(--border-hover);transform:translateY(-1px);box-shadow:0 4px 16px var(--shadow)}
 .tr-cat-card.tr-done{border-color:#1a3a28;background:#111e18}
 .tr-cat-card.tr-over{border-color:#3a1a1a;background:#1e1111}
 .tr-cat-card.tr-closed{border-color:#1e2235;background:#13151e;opacity:.75}
 .tr-cc-foot{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .tr-cc-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;gap:6px}
-.tr-cc-name{font-size:13px;font-weight:600;color:#e8e9ed;margin-bottom:1px}
-.tr-cc-sub{font-size:10px;color:#555878}
+.tr-cc-name{font-size:13px;font-weight:600;color:var(--text);margin-bottom:1px}
+.tr-cc-sub{font-size:10px;color:var(--text-faint)}
 .tr-cc-badges{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
 .tr-cc-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:9px;white-space:nowrap}
 .tr-cc-amt{font-size:19px;font-weight:800;letter-spacing:-.5px;margin-bottom:2px}
-.tr-cc-brow{display:flex;justify-content:space-between;font-size:10px;color:#555878;margin-bottom:7px}
-.tr-cc-bar{height:4px;background:#252840;border-radius:2px;overflow:hidden;margin-bottom:8px}
+.tr-cc-brow{display:flex;justify-content:space-between;font-size:10px;color:var(--text-faint);margin-bottom:7px}
+.tr-cc-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-bottom:8px}
 .tr-cc-fill{height:100%;border-radius:2px;transition:width .3s}
 .tr-cc-foot{display:flex;justify-content:space-between;align-items:center}
 .tr-cc-var{font-size:11px;font-weight:600}
 .tr-cc-acts{display:flex;gap:4px}
 .tr-cc-btn{padding:3px 9px;border-radius:6px;border:none;font-size:10px;font-weight:600;cursor:pointer}
-.tr-cc-add{background:#1a1e35;color:#4f6ef7;border:1px solid #252840}
-.tr-cc-done{background:#252840;color:#555878}
+.tr-cc-add{background:var(--muted-chip);color:#4f6ef7;border:1px solid var(--border)}
+.tr-cc-done{background:var(--border);color:var(--text-faint)}
 .tr-cc-done.done{background:#1a3a28;color:#34d47c}
-.tr-cc-lock{background:none;border:none;font-size:13px;cursor:pointer;color:#555878;padding:0 2px}
-.tr-cc-menu{background:none;border:none;font-size:16px;cursor:pointer;color:#555878;padding:0 3px;line-height:1}
+.tr-cc-lock{background:none;border:none;font-size:13px;cursor:pointer;color:var(--text-faint);padding:0 2px}
+.tr-cc-menu{background:none;border:none;font-size:16px;cursor:pointer;color:var(--text-faint);padding:0 3px;line-height:1}
 /* Txn drawer */
-.tr-txn-drawer{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px;display:none}
+.tr-txn-drawer{background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-bottom:10px;display:none}
 .tr-txn-drawer.open{display:block}
-.tr-txn-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid #252840;background:#161929}
+.tr-txn-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
 .tr-txn-title{font-size:12px;font-weight:600}
-.tr-txn-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid #1a1e2a;font-size:11px}
+.tr-txn-row{display:flex;align-items:center;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border-soft);font-size:11px}
 .tr-txn-row:last-child{border-bottom:none}
-.tr-txn-pending{background:#1a1e2a}
-.tr-txn-date{color:#555878;width:36px;flex-shrink:0}
-.tr-txn-desc{flex:1;color:#c0c2d0;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tr-txn-amt{font-weight:600;color:#e8e9ed;white-space:nowrap}
+.tr-txn-pending{background:var(--border-soft)}
+.tr-txn-date{color:var(--text-faint);width:36px;flex-shrink:0}
+.tr-txn-desc{flex:1;color:var(--text-dim);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-txn-amt{font-weight:600;color:var(--text);white-space:nowrap}
 .tr-txn-edit{background:none;border:none;color:#4f6ef7;cursor:pointer;font-size:11px;padding:0 2px}
 .tr-txn-del{background:none;border:none;color:#ef476f;cursor:pointer;font-size:12px;padding:0 2px}
 /* Surplus/deficit banner */
 .tr-surplus{background:#1a2a10;border-left:3px solid #34d47c;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#34d47c}
 .tr-deficit{background:#2a1010;border-left:3px solid #ef476f;border-radius:0 8px 8px 0;padding:8px 12px;margin-bottom:10px;font-size:12px;color:#ef476f}
 /* PROJECTION TABLE */
-.proj-table{background:#fff;border-radius:14px;overflow:hidden;margin-bottom:14px}
-.proj-row{display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;padding:10px 12px;border-bottom:1px solid #f2f2f7;align-items:center}
+.proj-table{background:var(--surface);border-radius:14px;overflow:hidden;margin-bottom:14px}
+.proj-row{display:grid;grid-template-columns:80px 1fr 1fr 1fr 1fr;padding:10px 12px;border-bottom:1px solid var(--border-soft);align-items:center}
 .proj-row:last-child{border-bottom:none}
-.proj-row.hdr{background:#f9f9f9;font-size:10px;font-weight:600;color:#6e6e73;text-transform:uppercase;letter-spacing:.04em}
-.proj-row.raise{background:#f0fff4}
+.proj-row.hdr{background:var(--surface-alt);font-size:10px;font-weight:600;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em}
+.proj-row.raise{background:var(--tint-green-bg)}
 .proj-month{font-size:13px;font-weight:500}
 .proj-income,.proj-exp,.proj-sav{font-size:13px;font-variant-numeric:tabular-nums}
 .proj-rem{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;text-align:right}
 
 /* DRAG AND DROP */
-.cat-drop-zone{display:none;padding:6px 16px;margin:2px 8px;border:2px dashed #d1d1d6;border-radius:8px;text-align:center;font-size:11px;color:#c7c7cc;transition:all .15s}
+.cat-drop-zone{display:none;padding:6px 16px;margin:2px 8px;border:2px dashed var(--border);border-radius:8px;text-align:center;font-size:11px;color:var(--text-faint);transition:all .15s}
 .dragging-active .cat-drop-zone{display:block}
-.cat-drop-zone.drag-over{border-color:#007aff;background:#e8f4ff;color:#007aff}
+.cat-drop-zone.drag-over{border-color:#007aff;background:var(--tint-blue-bg);color:#007aff}
 [draggable=true]{cursor:grab}
 [draggable=true]:active{cursor:grabbing}
 
 /* TRACKER DRAG & TOOLTIP */
-.tr-drag-handle{color:#555878;font-size:12px;cursor:grab;margin-right:4px;flex-shrink:0}
-.tr-drop-zone{display:none;padding:5px 14px;margin:2px 0;border:1px dashed #252840;border-radius:6px;text-align:center;font-size:10px;color:#555878}
+.tr-drag-handle{color:var(--text-faint);font-size:12px;cursor:grab;margin-right:4px;flex-shrink:0}
+.tr-drop-zone{display:none;padding:5px 14px;margin:2px 0;border:1px dashed var(--border);border-radius:6px;text-align:center;font-size:10px;color:var(--text-faint)}
 .dragging-active .tr-drop-zone{display:block}
-.tr-drop-zone.drag-over{border-color:#4f6ef7;background:#1a1e35;color:#4f6ef7}
-.tr-pending-wrap{background:#111424;border-radius:10px;border:1px solid #252840;overflow:hidden;margin-bottom:10px}
-.tr-pending-hdr{padding:8px 14px;border-bottom:1px solid #252840;background:#161929;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:#555878}
-.tr-tooltip{position:fixed;background:#1e2240;border:1px solid #353860;border-radius:10px;padding:10px 14px;font-size:12px;pointer-events:none;display:none;z-index:300;min-width:160px}
+.tr-drop-zone.drag-over{border-color:#4f6ef7;background:var(--muted-chip);color:#4f6ef7}
+.tr-pending-wrap{background:var(--surface-alt);border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-bottom:10px}
+.tr-pending-hdr{padding:8px 14px;border-bottom:1px solid var(--border);background:var(--surface);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-faint)}
+.tr-tooltip{position:fixed;background:#1e2240;border:1px solid var(--border-hover);border-radius:10px;padding:10px 14px;font-size:12px;pointer-events:none;display:none;z-index:300;min-width:160px}
 /* Mobile sidebar toggle + backdrop (hidden on desktop) */
-.tr-sb-toggle{display:none;background:#1a1e35;border:1px solid #252840;border-radius:8px;width:34px;height:34px;flex-shrink:0;align-items:center;justify-content:center;color:#c0c2d0;font-size:16px;cursor:pointer;margin:0 8px}
+.tr-sb-toggle{display:none;background:var(--muted-chip);border:1px solid var(--border);border-radius:8px;width:34px;height:34px;flex-shrink:0;align-items:center;justify-content:center;color:var(--text-dim);font-size:16px;cursor:pointer;margin:0 8px}
 .tr-sidebar-backdrop{display:none}
 
 /* ── MOBILE / NARROW SCREEN LAYOUT ────────────────────────────────────────── */
@@ -324,18 +345,18 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
   }
 
   .tr-sum-bar{
-    height:auto; flex-wrap:wrap; align-items:center; padding:6px 4px;
+    height:auto; flex-wrap:wrap; align-items:center; padding:6px 2px;
   }
   .tr-sum-item{
-    min-width:0; flex:1 1 22%; padding:0 6px; border-right:none;
+    min-width:0; flex:1 1 0; padding:0 3px; border-right:none; overflow:hidden;
   }
-  .tr-sum-label{font-size:8px}
-  .tr-sum-value{font-size:13px}
+  .tr-sum-label{font-size:7.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .tr-sum-value{font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
   .tr-sum-bar-item{
-    order:5; flex:1 1 100%; padding:6px 10px 4px; border-top:1px solid #252840; margin-top:4px;
+    order:5; flex:1 1 100%; padding:6px 10px 4px; border-top:1px solid var(--border); margin-top:4px;
   }
   .tr-sum-actions{
-    order:6; flex:1 1 100%; border-left:none; border-top:1px solid #252840;
+    order:6; flex:1 1 100%; border-left:none; border-top:1px solid var(--border);
     margin-left:0; padding:8px 8px 4px; flex-wrap:wrap; justify-content:flex-end;
   }
   .tr-btn-primary, .tr-btn-ghost{padding:7px 10px;font-size:11px}
@@ -351,13 +372,24 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
   .tr-cat-grid{grid-template-columns:1fr}
 
   .tr-txn-row{font-size:11px}
+
+  /* Let the whole dashboard scroll as one page on mobile — summary bar and
+     the money-flow chart scroll away as you scroll down, revealing category
+     cards below, instead of being trapped in a separate non-scrolling panel. */
+  #tracker.active{
+    position:static; display:block; height:auto; overflow:visible;
+  }
+  .tr-layout{height:auto; overflow:visible}
+  .tr-main{overflow:visible}
+  .tr-sec-detail{overflow:visible; flex:none}
 }
 .tr-tt-title{font-weight:700;color:#fff;margin-bottom:5px;font-size:13px}
 .tr-tt-row{display:flex;justify-content:space-between;gap:20px;color:#8890b0;margin-top:3px}
-.tr-tt-val{color:#e8e9ed;font-weight:600}
+.tr-tt-val{color:var(--text);font-weight:600}
 </style>
 </head>
 <body>
+<script>if(localStorage.getItem('gv_theme')==='light')document.body.classList.add('light-theme');</script>
 
 <!-- AUTH SCREEN -->
 <div id="authScreen">
@@ -365,25 +397,29 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
   <h2>Givens Family Finances</h2>
   <p>Sign in with Google to access your budget and financial plan.</p>
   <button class="btn-primary" onclick="signIn()">Sign in with Google</button>
-  <p style="font-size:12px;color:#8e8e93;margin-top:16px">Your data stays private in your Google Drive.</p>
+  <p style="font-size:12px;color:var(--text-faint);margin-top:16px">Your data stays private in your Google Drive.</p>
 </div>
 
 <!-- LOADING SCREEN -->
 <div id="loadingScreen">
   <div class="spinner"></div>
-  <p id="loadingMsg" style="font-size:14px;color:#6e6e73">Loading...</p>
+  <p id="loadingMsg" style="font-size:14px;color:var(--text-dim)">Loading...</p>
   <p id="loadingError" style="font-size:13px;color:#ff3b30;margin-top:12px;padding:0 20px;display:none"></p>
-  <button id="loadingSignOutBtn" onclick="forceSignOut()" style="display:none;margin-top:16px;background:#f2f2f7;color:#3a3a3c;border:none;border-radius:12px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">Sign out and try again</button>
+  <button id="loadingSignOutBtn" onclick="forceSignOut()" style="display:none;margin-top:16px;background:var(--muted-chip);color:var(--text);border:none;border-radius:12px;padding:10px 24px;font-size:14px;font-weight:600;cursor:pointer">Sign out and try again</button>
 </div>
 
 <!-- MAIN APP -->
 <div id="mainApp" style="display:none">
   <div class="app-header">
     <div class="sync-bar">
-      <h1>Givens Family Finances</h1>
+      <div style="display:flex;align-items:center;gap:8px;min-width:0">
+        <button class="tr-sb-toggle" id="trSidebarToggle" onclick="trToggleSidebar()">&#9776;</button>
+        <h1>Givens Family Finances</h1>
+      </div>
       <div style="display:flex;align-items:center;gap:8px">
         <div class="sync-info"><div class="sync-dot" id="syncDot"></div><span id="syncStatus">Saved</span></div>
-        <button onclick="signOut()" style="background:transparent;color:#9698b0;border:1px solid #2a3060;border-radius:10px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer">Sign out</button>
+        <button onclick="toggleTheme()" id="themeToggleBtn" style="background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:10px;width:34px;height:34px;font-size:14px;cursor:pointer">&#9789;</button>
+        <button onclick="signOut()" style="background:transparent;color:var(--text-dim);border:1px solid var(--border);border-radius:10px;padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer">Sign out</button>
       </div>
     </div>
 
@@ -420,7 +456,7 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
         <div class="tr-sb-footer">
           <span class="tr-sb-label" style="padding:0;margin-bottom:3px">Budget used</span>
           <div class="tr-overall-bar" id="trOverallBar"></div>
-          <div id="trOverallPct" style="font-size:11px;font-weight:600;color:#e8e9ed"></div>
+          <div id="trOverallPct" style="font-size:11px;font-weight:600;color:var(--text)"></div>
         </div>
       </div>
       <div class="tr-sidebar-backdrop" id="trSidebarBackdrop" onclick="trToggleSidebar(false)"></div>
@@ -430,14 +466,13 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 
         <!-- SUMMARY BAR -->
         <div class="tr-sum-bar">
-          <button class="tr-sb-toggle" id="trSidebarToggle" onclick="trToggleSidebar()">&#9776;</button>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Income</div>
             <div class="tr-sum-value" id="trSumIncome" style="color:#7b9fff"></div>
           </div>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Budgeted</div>
-            <div class="tr-sum-value" id="trSumBudgeted" style="color:#c8cadd"></div>
+            <div class="tr-sum-value" id="trSumBudgeted" style="color:var(--text-dim)"></div>
           </div>
           <div class="tr-sum-item">
             <div class="tr-sum-label">Spent</div>
@@ -448,14 +483,14 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
             <div class="tr-sum-value" id="trSumAvailable"></div>
           </div>
           <div class="tr-sum-bar-item">
-            <span style="font-size:10px;color:#555878;white-space:nowrap" id="trSumPct"></span>
+            <span style="font-size:10px;color:var(--text-faint);white-space:nowrap" id="trSumPct"></span>
             <div class="tr-sum-progress"><div class="tr-sum-fill" id="trSumFill"></div></div>
-            <span style="font-size:10px;color:#555878;white-space:nowrap" id="trSumDays"></span>
+            <span style="font-size:10px;color:var(--text-faint);white-space:nowrap" id="trSumDays"></span>
           </div>
           <div class="tr-sum-actions">
             <div class="sync-info">
               <div class="sync-dot" id="syncDot"></div>
-              <span id="syncStatus" style="color:#555878;font-size:11px">Saved</span>
+              <span id="syncStatus" style="color:var(--text-faint);font-size:11px">Saved</span>
             </div>
             <button class="tr-btn-ghost" onclick="openAddIncome()">+ Income</button>
             <button class="tr-btn-ghost" onclick="openAdd(trackerIdx, budgetPlan[0]?.Category)">+ Add</button>
@@ -494,12 +529,12 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
     <div class="cards" id="monthlyCards"></div>
     <div id="monthlyBanner"></div>
     <div id="monthlySections"></div>
-    <div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px" id="monthlyBar"></div>
+    <div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px" id="monthlyBar"></div>
   </div>
 
   <!-- PROJECTION VIEW -->
   <div class="view" id="projection">
-    <p style="font-size:13px;color:#6e6e73;margin-bottom:16px">Jun 2026 – Jul 2027 plan · Raises applied Jan &amp; Jun 2027</p>
+    <p style="font-size:13px;color:var(--text-dim);margin-bottom:16px">Jun 2026 – Jul 2027 plan · Raises applied Jan &amp; Jun 2027</p>
     <div class="proj-table">
       <div class="proj-row hdr">
         <div class="proj-month">Month</div>
@@ -510,7 +545,7 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
       </div>
       <div id="projRows"></div>
     </div>
-    <div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px" id="projSummary"></div>
+    <div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px" id="projSummary"></div>
   </div>
 
   <!-- OTHER VIEWS -->
@@ -543,7 +578,7 @@ h1{font-size:17px;font-weight:700;margin-bottom:0;color:#e8e9ed}
 <div class="modal-bg" id="modalSkipped" style="display:none">
   <div class="modal">
     <h3>Skipped transactions</h3>
-    <div style="font-size:12px;color:#9698b0;margin-bottom:8px">These won't reappear when you sync. Hit Undo to bring one back into the review queue on your next sync.</div>
+    <div style="font-size:12px;color:var(--text-dim);margin-bottom:8px">These won't reappear when you sync. Hit Undo to bring one back into the review queue on your next sync.</div>
     <div style="text-align:right;margin-bottom:6px">
       <button id="skippedScopeBtn" onclick="toggleSkippedScope()" style="background:none;border:none;color:#4f6ef7;font-size:11px;cursor:pointer;padding:0">Show all months</button>
     </div>
@@ -658,6 +693,7 @@ let balanceHistory = [];   // [{date, account, type, balance, parsedDate}]
 let lastInsights = null;   // persists until next Analyze click
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const fmt = n => '$' + (Math.abs(n) || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
+const fmtWhole = n => '$' + Math.round(Math.abs(n) || 0).toLocaleString('en-US');
 const fmtSigned = n => { if (n === null || n === undefined) return ''; if (Math.abs(n) < 0.005) return '✓'; return (n > 0 ? '+' : '') + fmt(n); };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const mk = idx => months[idx]?.key || '';
@@ -1015,15 +1051,16 @@ function renderTracker(idx) {
   const avail = calcAvailable(idx);
   const pct = income > 0 ? Math.min(Math.round(totalSpent / income * 100), 120) : 0;
 
+  const sumF = window.innerWidth <= 768 ? fmtWhole : fmt;
   const sumIncome = document.getElementById('trSumIncome');
-  if (sumIncome) sumIncome.textContent = fmt(income);
+  if (sumIncome) sumIncome.textContent = sumF(income);
   const sumBudgeted = document.getElementById('trSumBudgeted');
-  if (sumBudgeted) sumBudgeted.textContent = fmt(totalBudgeted);
+  if (sumBudgeted) sumBudgeted.textContent = sumF(totalBudgeted);
   const sumSpent = document.getElementById('trSumSpent');
-  if (sumSpent) sumSpent.textContent = fmt(totalSpent);
+  if (sumSpent) sumSpent.textContent = sumF(totalSpent);
   const sumAvail = document.getElementById('trSumAvailable');
   if (sumAvail) {
-    sumAvail.textContent = (avail.total < 0 ? '-' : '') + fmt(Math.abs(avail.total));
+    sumAvail.textContent = (avail.total < 0 ? '-' : '') + sumF(Math.abs(avail.total));
     sumAvail.style.color = avail.total < 0 ? '#ff6b6b' : avail.total < 100 ? '#f59e3f' : '#ffd166';
   }
   const sumPct = document.getElementById('trSumPct');
@@ -1262,6 +1299,10 @@ function trDrawSankey(idx, sections) {
 
   const NW = 10, GAP = 5;
   const isNarrow = W < 480;
+  const isLight = isLightTheme();
+  const labelCol = isLight ? '#6e6e73' : '#9698b8';
+  const firstAmtCol = isLight ? '#1c1c1e' : '#ffffff';
+  const hovLabelCol = isLight ? '#1c1c1e' : '#ffffff';
   const PAD_L = isNarrow ? 54 : 110, PAD_R = isNarrow ? 74 : 180, PAD_T = 14, PAD_B = 14;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
@@ -1344,12 +1385,12 @@ function trDrawSankey(idx, sections) {
       ctx.textAlign = 'right';
       if (showLabel && !isNarrow) {
         ctx.font = '500 11px -apple-system, BlinkMacSystemFont, sans-serif';
-        ctx.fillStyle = '#9698b8';
+        ctx.fillStyle = labelCol;
         ctx.fillText(n.label, n.x - 8, midY - 7);
       }
       if (showAmt) {
         ctx.font = `700 ${isNarrow ? 11 : 13}px -apple-system, BlinkMacSystemFont, sans-serif`;
-        ctx.fillStyle = '#ffffff';
+        ctx.fillStyle = firstAmtCol;
         ctx.fillText(n.display, n.x - 8, midY + (isNarrow ? 0 : 7));
       }
     } else {
@@ -1359,7 +1400,7 @@ function trDrawSankey(idx, sections) {
       const labelLen = isNarrow ? (isLast ? 10 : 12) : (isLast ? 18 : 20);
       if (showLabel) {
         ctx.font = `${isHov ? 700 : 500} ${labelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
-        ctx.fillStyle = isHov ? '#ffffff' : '#9698b8';
+        ctx.fillStyle = isHov ? hovLabelCol : labelCol;
         ctx.fillText(n.label.substring(0, labelLen), tx, midY - (showAmt ? 6 : 0));
       }
       if (showAmt) {
@@ -1437,9 +1478,9 @@ function trBuildDetail(idx, sections) {
   if (!detail) return;
 
   if (trActiveSec === null) {
-    detail.innerHTML = `<div style="padding:40px;text-align:center;color:#555878">
+    detail.innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-faint)">
       <div style="font-size:28px;margin-bottom:10px">👆</div>
-      <div style="font-size:14px;font-weight:600;color:#9698b8;margin-bottom:6px">Select a section</div>
+      <div style="font-size:14px;font-weight:600;color:var(--text-faint);margin-bottom:6px">Select a section</div>
       <div style="font-size:12px;line-height:1.6">Click a section in the sidebar or a node<br>in the Sankey diagram to drill down</div>
     </div>`;
     return;
@@ -1503,8 +1544,8 @@ function trBuildDetail(idx, sections) {
     // Badges
     let badges = '';
     if (sf) badges += `<span class="tr-cc-badge" style="background:#1a3a28;color:#34d47c">Sinking</span>`;
-    if (st.isClosed) badges += `<span class="tr-cc-badge" style="background:#1e2235;color:#555878">Closed</span>`;
-    if (cat.isFixed) badges += `<span class="tr-cc-badge" style="background:#1a1e35;color:#555878;border:1px solid #252840">⚡</span>`;
+    if (st.isClosed) badges += `<span class="tr-cc-badge" style="background:var(--input-bg);color:var(--text-faint)">Closed</span>`;
+    if (cat.isFixed) badges += `<span class="tr-cc-badge" style="background:var(--muted-chip);color:var(--text-faint);border:1px solid var(--border)">⚡</span>`;
     if (over2 && !st.isClosed) badges += `<span class="tr-cc-badge" style="background:#3a1212;color:#ef476f">Over</span>`;
 
     // Sub note for closed categories that freed up budget
@@ -1547,7 +1588,7 @@ function trBuildDetail(idx, sections) {
         <button class="tr-cc-btn tr-cc-add" onclick="openAdd(${idx},'${esc(cat.Category)}')">+ Add</button>
         ${canCover ? `<button class="tr-cc-btn" style="background:#1a2a10;color:#f59e3f;font-size:10px" onclick="coverFromSurplus(${idx},'${esc(cat.Category)}',${varDiff.toFixed(2)})">Cover</button>` : ''}
         <button class="tr-cc-btn tr-cc-done ${st.isSpent?'done':''}" onclick="toggleSpent(${idx},'${esc(cat.Category)}',${budget})">${st.isSpent?(cat.isSavings?'Saved ✓':'Spent ✓'):(cat.isSavings?'Save':'Done')}</button>
-        <input class="cat-budget-input" style="background:transparent;color:#555878;border:none;font-size:10px;width:72px;text-align:right;margin-left:auto"
+        <input class="cat-budget-input" style="background:transparent;color:var(--text-faint);border:none;font-size:10px;width:72px;text-align:right;margin-left:auto"
           value="${fmt(budget)}"
           onclick="event.stopPropagation()"
           onblur="saveBudgetEdit(${idx},'${esc(cat.Category)}',this.value)"
@@ -1570,10 +1611,10 @@ function trBuildDetail(idx, sections) {
           <div class="tr-txn-title" style="color:${'#'+sec.color.replace('#','').substring(0,6)}">${cat.Category} · transactions</div>
           <div style="display:flex;gap:6px;align-items:center">
             <button onclick="openAdd(${idx},'${esc(cat.Category)}')" class="tr-cc-btn tr-cc-add">+ Add</button>
-            <button onclick="trOpenTxnCat=null;trBuildDetail(${idx},getTrSections())" style="background:none;border:none;color:#555878;cursor:pointer;font-size:14px">✕</button>
+            <button onclick="trOpenTxnCat=null;trBuildDetail(${idx},getTrSections())" style="background:none;border:none;color:var(--text-faint);cursor:pointer;font-size:14px">✕</button>
           </div>
         </div>
-        ${txns.length ? trBuildTxnRows(txns, idx, cat.Category, st.isClosed, sec.color) : '<div style="padding:12px 14px;font-size:12px;color:#555878">No transactions yet</div>'}
+        ${txns.length ? trBuildTxnRows(txns, idx, cat.Category, st.isClosed, sec.color) : '<div style="padding:12px 14px;font-size:12px;color:var(--text-faint)">No transactions yet</div>'}
       </div>`;
     }
   }
@@ -1604,7 +1645,7 @@ function trBuildTxnRows(txns, idx, catName, closed, color) {
     const dateStr = t.ts ? new Date(t.ts).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '';
     const del  = closed ? '' : `<button class="tr-txn-del" onclick="event.stopPropagation();deleteTxn(${idx},'${esc(catName)}',${realTi})">✕</button>`;
     const edit = closed ? '' : `<button class="tr-txn-edit" onclick="event.stopPropagation();openEditTxn(${idx},'${esc(catName)}',${realTi})">✏</button>`;
-    const pending = t.pending ? '<span style="font-size:9px;background:#1a1e35;color:#f59e3f;border-radius:4px;padding:1px 4px;margin-left:3px">⏳</span>' : '';
+    const pending = t.pending ? '<span style="font-size:9px;background:var(--muted-chip);color:#f59e3f;border-radius:4px;padding:1px 4px;margin-left:3px">⏳</span>' : '';
     const dragAttrs = (!closed && !IS_TOUCH)
       ? `draggable="true" ondragstart="onTxnDragStart(event,${idx},'${esc(catName)}',${realTi})" ondragend="onTxnDragEnd(event)"`
       : '';
@@ -1623,9 +1664,9 @@ function trBuildTxnRows(txns, idx, catName, closed, color) {
 
   if (imported.length) {
     html += `<div onclick="event.stopPropagation();toggleImportedTxns('${esc(importedKey)}')"
-      style="display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:#161929;cursor:pointer;border-top:1px solid #252840">
-      <span style="font-size:10px;color:#555878;font-weight:700">IMPORTED (${imported.length})</span>
-      <span style="font-size:10px;color:#555878">${impCollapsed?'›':'⌄'}</span>
+      style="display:flex;align-items:center;justify-content:space-between;padding:5px 14px;background:var(--surface);cursor:pointer;border-top:1px solid var(--border)">
+      <span style="font-size:10px;color:var(--text-faint);font-weight:700">IMPORTED (${imported.length})</span>
+      <span style="font-size:10px;color:var(--text-faint)">${impCollapsed?'›':'⌄'}</span>
     </div>`;
     if (!impCollapsed) html += imported.map(t => row(t, txns.indexOf(t))).join('');
   }
@@ -1955,13 +1996,13 @@ function openAddIncome() {
   modalCtx = {type: 'income', idx: trackerIdx};
   document.getElementById('modalAddTitle').textContent = 'Add income · ' + mo.label;
   document.getElementById('addRows').innerHTML = `
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Source / Label</label>
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Source / Label</label>
     <input type="text" id="incomeLabel" placeholder="e.g. Work reimbursement, Side project"
-      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
       onkeydown="if(event.key==='Enter'){event.preventDefault();document.getElementById('incomeAmount').focus()}">
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Amount</label>
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Amount</label>
     <input type="number" id="incomeAmount" placeholder="0.00" step="0.01" min="0"
-      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
       onkeydown="if(event.key==='Enter'){event.preventDefault();saveAddIncome()}">
   `;
   document.getElementById('addDesc').style.display = 'none';
@@ -2017,7 +2058,7 @@ function renderMonthly(idx) {
   const income = getIncome(idx);
 
   document.getElementById('monthlyIncome').innerHTML =
-    `<strong>${fmt(income.total)}</strong> <span style="color:#6e6e73">(Eric ${fmt(income.eric)} + Mattie ${fmt(income.mattie)})</span>`;
+    `<strong>${fmt(income.total)}</strong> <span style="color:var(--text-dim)">(Eric ${fmt(income.eric)} + Mattie ${fmt(income.mattie)})</span>`;
 
   const sections = {};
   let totalExp = 0, totalSav = 0;
@@ -2049,7 +2090,7 @@ function renderMonthly(idx) {
     html += `<div class="section"><div class="sec-hdr">
       <div class="sec-accent" style="background:${col}"></div>
       <div class="sec-title">${secName}</div>
-      <div class="sec-meta"><span style="font-size:12px;color:#8e8e93">${fmt(secTotal)}</span></div>
+      <div class="sec-meta"><span style="font-size:12px;color:var(--text-faint)">${fmt(secTotal)}</span></div>
     </div>`;
     items.forEach(cat => {
       const b = getPlanBudget(idx, cat.Category);
@@ -2067,8 +2108,8 @@ function renderMonthly(idx) {
   const sP = Math.min((totalSav / income.total) * 100, 100);
   document.getElementById('monthlyBar').innerHTML =
     `<div style="display:flex;justify-content:space-between;font-size:14px;margin-bottom:4px">
-      <span style="font-weight:600">Total: ${fmt(totalExp + totalSav)}</span><span style="color:#6e6e73">of ${fmt(income.total)}</span></div>
-    <div style="background:#e5e5ea;border-radius:6px;height:10px;overflow:hidden;display:flex;margin-bottom:6px">
+      <span style="font-weight:600">Total: ${fmt(totalExp + totalSav)}</span><span style="color:var(--text-dim)">of ${fmt(income.total)}</span></div>
+    <div style="background:var(--border);border-radius:6px;height:10px;overflow:hidden;display:flex;margin-bottom:6px">
       <div style="width:${eP.toFixed(1)}%;background:#007aff;height:100%;border-radius:6px 0 0 6px"></div>
       <div style="width:${sP.toFixed(1)}%;background:#af52de;height:100%;border-radius:0 6px 6px 0"></div></div>
     <div style="display:flex;justify-content:space-between;font-size:13px">
@@ -2096,7 +2137,7 @@ function buildProjection() {
     const rn = RAISE[idx];
     const remColor = rem < 0 ? '#ff3b30' : '#34c759';
     return `<div class="proj-row${rn ? ' raise' : ''}">
-      <div class="proj-month"><div>${mo.label}</div>${rn ? `<div style="font-size:9px;color:#1a7f37;font-weight:600">${rn}</div>` : ''}</div>
+      <div class="proj-month"><div>${mo.label}</div>${rn ? `<div style="font-size:9px;color:var(--tint-green-text);font-weight:600">${rn}</div>` : ''}</div>
       <div class="proj-income" style="color:#007aff">${fmt(inc)}</div>
       <div class="proj-exp">${fmt(exp)}</div>
       <div class="proj-sav" style="color:#af52de">${fmt(sav)}</div>
@@ -2106,9 +2147,9 @@ function buildProjection() {
 
   document.getElementById('projSummary').innerHTML =
     `<div style="font-size:13px;font-weight:600;margin-bottom:10px">14-Month Totals (Plan)</div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total income</span><span style="color:#007aff;font-weight:500">${fmt(tI)}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total expenses</span><span style="font-weight:500">${fmt(tE)}</span></div>
-    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f2f2f7"><span style="color:#6e6e73">Total savings</span><span style="color:#af52de;font-weight:500">${fmt(tS)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid var(--border-soft)"><span style="color:var(--text-dim)">Total income</span><span style="color:#007aff;font-weight:500">${fmt(tI)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid var(--border-soft)"><span style="color:var(--text-dim)">Total expenses</span><span style="font-weight:500">${fmt(tE)}</span></div>
+    <div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid var(--border-soft)"><span style="color:var(--text-dim)">Total savings</span><span style="color:#af52de;font-weight:500">${fmt(tS)}</span></div>
     <div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600"><span>Total remaining</span><span style="color:${tR < 0 ? '#ff3b30' : '#34c759'}">${tR < 0 ? '-' : ''}${fmt(Math.abs(tR))}</span></div>`;
 }
 // ── PLAID TRANSACTION SYNC ────────────────────────────────────────────────────
@@ -2418,7 +2459,7 @@ function renderPendingQueue() {
   const rows = pendingTxns.map((txn, i) => {
     const dateStr = new Date(txn.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'});
     const pendingBadge = txn.pending
-      ? '<span style="font-size:10px;background:#fff3cd;color:#9a6700;border-radius:4px;padding:1px 5px;font-weight:600;flex-shrink:0">⏳</span>'
+      ? '<span style="font-size:10px;background:var(--surface)3cd;color:var(--tint-amber-text);border-radius:4px;padding:1px 5px;font-weight:600;flex-shrink:0">⏳</span>'
       : '';
     const isAmzn = isAmazonMerchant(txn.merchant, txn.rawName);
 
@@ -2436,10 +2477,10 @@ function renderPendingQueue() {
     return renderStandardRow(txn, i, dateStr, pendingBadge);
   }).join('');
 
-  return `<div style="background:#1a1d27;border-radius:12px;margin-bottom:10px;overflow:hidden;border:1px solid #252840">
-    <div style="padding:8px 12px;border-bottom:1px solid #252840;display:flex;align-items:center;gap:12px;background:#161929">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#555878">Review Transactions</div>
-      <div style="font-size:11px;color:#555878">${pendingTxns.length} to categorize</div>
+  return `<div style="background:var(--surface-alt);border-radius:12px;margin-bottom:10px;overflow:hidden;border:1px solid var(--border)">
+    <div style="padding:8px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;background:var(--surface)">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-faint)">Review Transactions</div>
+      <div style="font-size:11px;color:var(--text-faint)">${pendingTxns.length} to categorize</div>
     </div>
     ${rows}
   </div>`;
@@ -2460,71 +2501,71 @@ function renderStandardRow(txn, i, dateStr, pendingBadge) {
       ).join('');
       return `<div style="display:flex;gap:4px;align-items:center;margin-bottom:3px;padding-left:36px">
         <select onchange="updatePendingSplit(${i},${si},'cat',this.value)"
-          style="flex:1;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:11px;background:#1e2235;color:#e8e9ed">
+          style="flex:1;border:1px solid var(--border-hover);border-radius:6px;padding:3px 5px;font-size:11px;background:var(--input-bg);color:var(--text)">
           <option value="">— Category —</option>${spOpts}
         </select>
         <input type="number" value="${sp.amt}" placeholder="0.00" step="0.01"
           oninput="updatePendingSplit(${i},${si},'amt',this.value)"
-          style="width:64px;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:11px;text-align:right;background:#1e2235;color:#e8e9ed">
+          style="width:64px;border:1px solid var(--border-hover);border-radius:6px;padding:3px 5px;font-size:11px;text-align:right;background:var(--input-bg);color:var(--text)">
         ${txn.splits.length > 2 ? `<button onclick="removePendingSplitRow(${i},${si})" style="background:none;border:none;color:#ef476f;font-size:13px;cursor:pointer">✕</button>` : ''}
       </div>`;
     }).join('');
-    return `<div style="padding:7px 10px;border-bottom:1px solid #252840">
+    return `<div style="padding:7px 10px;border-bottom:1px solid var(--border)">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
-        <span style="font-size:11px;color:#555878;min-width:36px">${dateStr}</span>
-        <span style="font-size:13px;font-weight:500;color:#e8e9ed;flex:1">${txn.merchant}</span>${pendingBadge}
+        <span style="font-size:11px;color:var(--text-faint);min-width:36px">${dateStr}</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text);flex:1">${txn.merchant}</span>${pendingBadge}
         <span style="font-size:13px;font-weight:600;color:#ef476f">$${txn.amount.toFixed(2)}</span>
       </div>
       ${splitRows}
       <div style="display:flex;justify-content:space-between;align-items:center;padding-left:36px;margin-top:4px">
         <div style="display:flex;gap:8px">
           <button onclick="addPendingSplitRow(${i})" style="background:none;border:none;color:#4f6ef7;font-size:11px;cursor:pointer">+ row</button>
-          <button onclick="togglePendingSplit(${i})" style="background:none;border:none;color:#555878;font-size:11px;cursor:pointer">cancel</button>
+          <button onclick="togglePendingSplit(${i})" style="background:none;border:none;color:var(--text-faint);font-size:11px;cursor:pointer">cancel</button>
         </div>
         <div style="display:flex;align-items:center;gap:6px">
           <span id="split_rem_${i}" style="font-size:11px;font-weight:600;color:${balanced?'#34d47c':'#f59e3f'}">${balanced?'✓ Balanced':'Rem: $'+(txn.amount-splitTotal).toFixed(2)}</span>
           <button onclick="confirmPendingTxn(${i})" style="background:#34d47c;color:#0a2010;border:none;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;cursor:pointer">✓ Save</button>
-          <button onclick="skipPendingTxn(${i})" style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
+          <button onclick="skipPendingTxn(${i})" style="background:var(--border);color:var(--text-faint);border:none;border-radius:6px;padding:3px 8px;font-size:11px;cursor:pointer">✕</button>
         </div>
       </div>
     </div>`;
   }
 
-  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #252840">
-    <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border)">
+    <span style="font-size:11px;color:var(--text-faint);min-width:36px;flex-shrink:0">${dateStr}</span>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:4px">
-        <span style="font-size:13px;font-weight:500;color:#e8e9ed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>${pendingBadge}
+        <span style="font-size:13px;font-weight:500;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${txn.merchant}</span>${pendingBadge}
       </div>
-      ${showRaw ? `<div style="font-size:10px;color:#555878">${txn.rawName}</div>` : ''}
+      ${showRaw ? `<div style="font-size:10px;color:var(--text-faint)">${txn.rawName}</div>` : ''}
     </div>
     <span style="font-size:13px;font-weight:600;color:#ef476f;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
     <select id="pending_cat_${i}" onchange="onPendingCatChange(${i},this)"
-      style="width:150px;flex-shrink:0;border:1px solid #353860;border-radius:6px;padding:3px 5px;font-size:12px;background:#1e2235;color:#e8e9ed">
+      style="width:150px;flex-shrink:0;border:1px solid var(--border-hover);border-radius:6px;padding:3px 5px;font-size:12px;background:var(--input-bg);color:var(--text)">
       <option value="">— Category —</option>${opts}
     </select>
     <button onclick="togglePendingSplit(${i})" title="Split"
-      style="background:#1e2235;color:#9698b0;border:1px solid #353860;border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;flex-shrink:0">⇄</button>
+      style="background:var(--input-bg);color:var(--text-dim);border:1px solid var(--border-hover);border-radius:6px;padding:3px 7px;font-size:11px;cursor:pointer;flex-shrink:0">⇄</button>
     <button onclick="confirmPendingTxn(${i})"
       style="background:#34d47c;color:#0a2010;border:none;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">✓</button>
     <button onclick="skipPendingTxn(${i})"
-      style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>
+      style="background:var(--border);color:var(--text-faint);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0">✕</button>
   </div>`;
 }
 
 function renderAmazonWaiting(txn, i, dateStr, pendingBadge) {
-  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid #252840">
-    <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+  return `<div style="display:flex;align-items:center;gap:6px;padding:7px 10px;border-bottom:1px solid var(--border)">
+    <span style="font-size:11px;color:var(--text-faint);min-width:36px;flex-shrink:0">${dateStr}</span>
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:center;gap:4px">
-        <span style="font-size:13px;font-weight:500;color:#e8e9ed">Amazon</span>${pendingBadge}
-        <span style="font-size:10px;background:#1e2235;color:#f59e3f;border-radius:4px;padding:1px 6px;font-weight:600;border:1px solid #353860">⏳ Waiting for order email</span>
+        <span style="font-size:13px;font-weight:500;color:var(--text)">Amazon</span>${pendingBadge}
+        <span style="font-size:10px;background:var(--input-bg);color:#f59e3f;border-radius:4px;padding:1px 6px;font-weight:600;border:1px solid var(--border-hover)">⏳ Waiting for order email</span>
       </div>
-      <div style="font-size:10px;color:#555878">${txn.rawName}</div>
+      <div style="font-size:10px;color:var(--text-faint)">${txn.rawName}</div>
     </div>
     <span style="font-size:13px;font-weight:600;color:#ef476f;flex-shrink:0">$${txn.amount.toFixed(2)}</span>
     <button onclick="skipPendingTxn(${i})"
-      style="background:#252840;color:#555878;border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0" title="Skip">✕</button>
+      style="background:var(--border);color:var(--text-faint);border:none;border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;flex-shrink:0" title="Skip">✕</button>
   </div>`;
 }
 
@@ -2548,53 +2589,53 @@ function renderAmazonRow(txn, i, dateStr, pendingBadge) {
     return `<div style="display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid #1a1e2a">
       ${hasImage
         ? `<img src="${item.imageUrl}" alt="${esc(item.name)}"
-            style="width:40px;height:40px;object-fit:contain;border-radius:6px;background:#1e2235;flex-shrink:0"
+            style="width:40px;height:40px;object-fit:contain;border-radius:6px;background:var(--input-bg);flex-shrink:0"
             onerror="this.style.display='none'">`
-        : `<div style="width:40px;height:40px;background:#1e2235;border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>`}
+        : `<div style="width:40px;height:40px;background:var(--input-bg);border-radius:6px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px">📦</div>`}
       ${isManual
         ? `<input type="text" placeholder="Item name" value="${esc(item.name)}"
             oninput="updateAmazonItemName(${i},${ii},this.value)"
-            style="flex:1;min-width:0;border:1px solid #353860;border-radius:6px;padding:4px 8px;font-size:12px;background:#1e2235;color:#e8e9ed">`
+            style="flex:1;min-width:0;border:1px solid var(--border-hover);border-radius:6px;padding:4px 8px;font-size:12px;background:var(--input-bg);color:var(--text)">`
         : `<div style="flex:1;min-width:0">
-            <div style="font-size:12px;color:#c0c2d0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(item.name)}">${item.name}</div>
+            <div style="font-size:12px;color:var(--text-dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(item.name)}">${item.name}</div>
             ${item.status === 'shipped' ? '<div style="font-size:10px;color:#34d47c">✓ Shipped</div>' : ''}
            </div>`}
-      <span style="font-size:12px;font-weight:600;color:#e8e9ed;white-space:nowrap;flex-shrink:0">$${(item.totalPrice||item.listPrice||0).toFixed(2)}</span>
+      <span style="font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;flex-shrink:0">$${(item.totalPrice||item.listPrice||0).toFixed(2)}</span>
       ${isManual
         ? `<input type="number" placeholder="Price" value="${item.listPrice||''}" step="0.01" min="0"
             oninput="updateAmazonItem(${i},${ii},'listPrice',this.value)"
-            style="width:64px;flex-shrink:0;border:1px solid #353860;border-radius:6px;padding:4px 6px;font-size:11px;text-align:right;background:#1e2235;color:#e8e9ed">`
+            style="width:64px;flex-shrink:0;border:1px solid var(--border-hover);border-radius:6px;padding:4px 6px;font-size:11px;text-align:right;background:var(--input-bg);color:var(--text)">`
         : ''}
       <select onchange="updateAmazonItemCat(${i},${ii},this.value)"
-        style="width:140px;flex-shrink:0;border:1px solid ${item.category?'#34d47c':'#353860'};border-radius:6px;padding:3px 5px;font-size:11px;background:#1e2235;color:#e8e9ed">
+        style="width:140px;flex-shrink:0;border:1px solid ${item.category?'#34d47c':'#353860'};border-radius:6px;padding:3px 5px;font-size:11px;background:var(--input-bg);color:var(--text)">
         <option value="">— Category —</option>${iOpts}
       </select>
       <button onclick="removeAmazonItem(${i},${ii})"
-        style="background:none;border:none;color:#555878;font-size:13px;cursor:pointer;flex-shrink:0;padding:0 2px" title="Remove item">✕</button>
+        style="background:none;border:none;color:var(--text-faint);font-size:13px;cursor:pointer;flex-shrink:0;padding:0 2px" title="Remove item">✕</button>
     </div>`;
   }).join('');
 
-  return `<div style="border-bottom:1px solid #252840">
+  return `<div style="border-bottom:1px solid var(--border)">
     <!-- Amazon order header -->
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#161929;border-bottom:1px solid #252840">
-      <span style="font-size:11px;color:#555878;min-width:36px;flex-shrink:0">${dateStr}</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface);border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text-faint);min-width:36px;flex-shrink:0">${dateStr}</span>
       <span style="font-size:13px;font-weight:600;color:#f59e3f">📦 Amazon Order</span>
       ${pendingBadge}
-      ${txn.amazonOrderNumber ? `<span style="font-size:10px;color:#555878;font-family:monospace">${txn.amazonOrderNumber}</span>` : ''}
+      ${txn.amazonOrderNumber ? `<span style="font-size:10px;color:var(--text-faint);font-family:monospace">${txn.amazonOrderNumber}</span>` : ''}
       <span style="margin-left:auto;font-size:14px;font-weight:700;color:#ef476f">$${txn.amount.toFixed(2)}</span>
     </div>
 
     <!-- Apply all to one category -->
-    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:#13151f;border-bottom:1px solid #252840">
-      <span style="font-size:11px;color:#555878;flex-shrink:0">Apply all to:</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--surface-alt);border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text-faint);flex-shrink:0">Apply all to:</span>
       <select id="amzn_all_cat_${i}"
-        style="flex:1;max-width:180px;border:1px solid #353860;border-radius:6px;padding:4px 6px;font-size:12px;background:#1e2235;color:#e8e9ed">
+        style="flex:1;max-width:180px;border:1px solid var(--border-hover);border-radius:6px;padding:4px 6px;font-size:12px;background:var(--input-bg);color:var(--text)">
         <option value="">— Category —</option>${allCatSel}
       </select>
       <button onclick="applyAmazonCatToAll(${i}, document.getElementById('amzn_all_cat_${i}').value)"
         style="background:#4f6ef7;color:#fff;border:none;border-radius:7px;padding:4px 12px;font-size:12px;font-weight:600;cursor:pointer;flex-shrink:0">Apply to all</button>
       <button onclick="addAmazonItemManual(${i})"
-        style="background:#1e2235;color:#9698b0;border:1px solid #353860;border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:auto">+ Add item</button>
+        style="background:var(--input-bg);color:var(--text-dim);border:1px solid var(--border-hover);border-radius:7px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0;margin-left:auto">+ Add item</button>
     </div>
 
     <!-- Item rows -->
@@ -2602,19 +2643,19 @@ function renderAmazonRow(txn, i, dateStr, pendingBadge) {
 
     <!-- Unallocated remainder -->
     ${Math.abs(unallocated) > 0.02 ? `
-    <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:#1a1e2a;font-size:11px">
-      <span style="color:#555878;flex:1">Unallocated remainder</span>
+    <div style="display:flex;align-items:center;gap:8px;padding:5px 12px;background:var(--border-soft);font-size:11px">
+      <span style="color:var(--text-faint);flex:1">Unallocated remainder</span>
       <span style="color:${unallocated > 0 ? '#f59e3f' : '#ef476f'};font-weight:600">${unallocated > 0 ? '+' : ''}$${unallocated.toFixed(2)}</span>
     </div>` : ''}
 
     <!-- Footer actions -->
-    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#13151f">
-      <div style="font-size:11px;color:#555878">${items.filter(it=>it.category).length}/${items.length} items categorized</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:var(--surface-alt)">
+      <div style="font-size:11px;color:var(--text-faint)">${items.filter(it=>it.category).length}/${items.length} items categorized</div>
       <div style="display:flex;gap:6px">
         <button onclick="skipPendingTxn(${i})"
-          style="background:#252840;color:#555878;border:none;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer">Skip</button>
+          style="background:var(--border);color:var(--text-faint);border:none;border-radius:7px;padding:5px 12px;font-size:12px;cursor:pointer">Skip</button>
         <button onclick="confirmAmazonItems(${i})"
-          style="background:${someCatted?'#34d47c':'#252840'};color:${someCatted?'#0a2010':'#555878'};border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer">
+          style="background:${someCatted?'#34d47c':'var(--border)'};color:${someCatted?'#0a2010':'var(--text-faint)'};border:none;border-radius:7px;padding:5px 14px;font-size:12px;font-weight:700;cursor:pointer">
           ✓ Save ${allCatted ? 'all' : someCatted ? 'categorized' : ''}
         </button>
       </div>
@@ -2786,17 +2827,17 @@ function renderSkippedModal() {
   const list = skippedModalShowAll ? (trackerData.skippedTxns || []) : getSkippedForMonth(trackerIdx);
   if (scopeBtn) scopeBtn.textContent = skippedModalShowAll ? `Show only ${mo ? mo.label : 'this month'}` : 'Show all months';
   if (!list.length) {
-    body.innerHTML = `<div style="padding:20px 0;text-align:center;color:#555878;font-size:13px">No skipped transactions${skippedModalShowAll ? '' : ' in ' + (mo ? mo.label : 'this month')}</div>`;
+    body.innerHTML = `<div style="padding:20px 0;text-align:center;color:var(--text-faint);font-size:13px">No skipped transactions${skippedModalShowAll ? '' : ' in ' + (mo ? mo.label : 'this month')}</div>`;
     return;
   }
   const sorted = [...list].sort((a, b) => (b.skippedAt || '').localeCompare(a.skippedAt || ''));
   body.innerHTML = sorted.map(s => {
     const dateStr = s.date ? new Date(s.date + 'T12:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'}) : '';
-    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #252840">
-      <span style="font-size:11px;color:#555878;min-width:36px">${dateStr}</span>
-      <span style="font-size:13px;color:#e8e9ed;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.merchant)}</span>
-      <span style="font-size:13px;font-weight:600;color:#9698b0">$${s.amount.toFixed(2)}</span>
-      <button onclick="undoSkip('${s.id}')" style="background:#252840;color:#7b9fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">Undo</button>
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:11px;color:var(--text-faint);min-width:36px">${dateStr}</span>
+      <span style="font-size:13px;color:var(--text);flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.merchant)}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--text-dim)">$${s.amount.toFixed(2)}</span>
+      <button onclick="undoSkip('${s.id}')" style="background:var(--border);color:#7b9fff;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer;flex-shrink:0">Undo</button>
     </div>`;
   }).join('');
 }
@@ -2942,9 +2983,9 @@ function renderSnapshot() {
     '<div class="divider">Connected accounts</div>' +
     '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">' +
       '<button id="plaidConnectBtn" class="btn-xs btn-add" style="font-size:13px;padding:8px 16px" onclick="connectAccount()">+ Connect Account</button>' +
-      '<button id="plaidSyncBtn" class="btn-xs" style="background:#f2f2f7;color:#3a3a3c;font-size:13px;padding:8px 16px" onclick="syncBalances()">&#8635; Sync Balances</button>' +
+      '<button id="plaidSyncBtn" class="btn-xs" style="background:var(--muted-chip);color:var(--text);font-size:13px;padding:8px 16px" onclick="syncBalances()">&#8635; Sync Balances</button>' +
     '</div>' +
-    '<p id="plaidStatus" style="font-size:12px;color:#8e8e93;margin-bottom:12px"></p>' +
+    '<p id="plaidStatus" style="font-size:12px;color:var(--text-faint);margin-bottom:12px"></p>' +
     '<div id="plaidAccountsList"></div>' +
     '<div id="balanceCharts" style="margin-top:8px"></div>';
   syncBalances();
@@ -2956,7 +2997,7 @@ function renderSnapshotAccounts(accounts) {
   const el = document.getElementById('plaidAccountsList');
   if (!el) return;
   if (!accounts.length) {
-    el.innerHTML = '<p style="font-size:13px;color:#8e8e93;padding:8px 0">No accounts connected yet.</p>';
+    el.innerHTML = '<p style="font-size:13px;color:var(--text-faint);padding:8px 0">No accounts connected yet.</p>';
     return;
   }
 
@@ -3000,7 +3041,7 @@ function renderSnapshotAccounts(accounts) {
   const k529Total      = kinsleyTotal + kyleTotal + collinsTotal;
 
   const acctDetail = accts => accts.map(a =>
-    '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:#6e6e73">' +
+    '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:var(--text-dim)">' +
     '<span>' + (a.mapping.label || a.name) + '</span>' +
     '<span style="font-variant-numeric:tabular-nums">' + fmt(a.balance || 0) + '</span>' +
     '</div>'
@@ -3012,7 +3053,7 @@ function renderSnapshotAccounts(accounts) {
     return '<div class="card2" data-sskey="' + key + '" onclick="toggleSnapshotSection(this.dataset.sskey)" style="cursor:pointer">' +
       '<div style="display:flex;justify-content:space-between;align-items:flex-start">' +
         '<div class="card-label">' + label + '</div>' +
-        '<span style="color:#8e8e93;font-size:12px">' + (col ? '›' : '⌄') + '</span>' +
+        '<span style="color:var(--text-faint);font-size:12px">' + (col ? '›' : '⌄') + '</span>' +
       '</div>' +
       '<div class="card-value" style="color:' + (color || '#1c1c1e') + '">' + fmt(total) + '</div>' +
       (sub ? '<div class="card-sub">' + sub + '</div>' : '') +
@@ -3028,7 +3069,7 @@ function renderSnapshotAccounts(accounts) {
     '<div class="card2 full" style="margin-bottom:10px">' +
       '<div style="display:flex;justify-content:space-between;align-items:center">' +
         '<div class="card-label">Retirement</div>' +
-        '<span style="color:#8e8e93;font-size:13px">' + (retCol ? '›' : '⌄') + '</span>' +
+        '<span style="color:var(--text-faint);font-size:13px">' + (retCol ? '›' : '⌄') + '</span>' +
       '</div>' +
       '<div class="card-value blue" style="font-size:20px">' + fmt(retTotal) + '</div>' +
       '<div class="card-sub">Tap to ' + (retCol ? 'expand' : 'collapse') + '</div>' +
@@ -3050,7 +3091,7 @@ function renderSnapshotAccounts(accounts) {
       '<div class="card2 full" style="margin-bottom:10px">' +
         '<div style="display:flex;justify-content:space-between;align-items:center">' +
           '<div class="card-label">529 Savings</div>' +
-          '<span style="color:#8e8e93;font-size:13px">' + (s529Col ? '›' : '⌄') + '</span>' +
+          '<span style="color:var(--text-faint);font-size:13px">' + (s529Col ? '›' : '⌄') + '</span>' +
         '</div>' +
         '<div class="card-value purple" style="font-size:20px">' + fmt(k529Total) + '</div>' +
         '<div class="card-sub">Tap to ' + (s529Col ? 'expand' : 'collapse') + '</div>' +
@@ -3260,13 +3301,13 @@ function renderBalanceCharts() {
 
   // ── RETIREMENT CHART ──
   const retTotal = retData.length ? retData[retData.length-1].total : 0;
-  html += `<div style="background:#fff;border-radius:14px;margin-bottom:12px;overflow:hidden">
+  html += `<div style="background:var(--surface);border-radius:14px;margin-bottom:12px;overflow:hidden">
     <div onclick="toggleBalanceChart('retirement')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:${retirementChartCollapsed?'none':'1px solid #f2f2f7'}">
       <div>
         <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">Retirement growth</div>
         ${retTotal ? `<div style="font-size:12px;color:#007aff;font-weight:600">${fmt(retTotal)} current</div>` : ''}
       </div>
-      <span style="color:#8e8e93;font-size:14px">${retirementChartCollapsed ? '›' : '⌄'}</span>
+      <span style="color:var(--text-faint);font-size:14px">${retirementChartCollapsed ? '›' : '⌄'}</span>
     </div>`;
 
   if (!retirementChartCollapsed) {
@@ -3292,13 +3333,13 @@ function renderBalanceCharts() {
 
   // ── 529 CHART ──
   const s529Total = s529Data.length ? s529Data[s529Data.length-1].total : 0;
-  html += `<div style="background:#fff;border-radius:14px;margin-bottom:12px;overflow:hidden">
+  html += `<div style="background:var(--surface);border-radius:14px;margin-bottom:12px;overflow:hidden">
     <div onclick="toggleBalanceChart('529')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:${chart529Collapsed?'none':'1px solid #f2f2f7'}">
       <div>
         <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em">529 growth</div>
         ${s529Total ? `<div style="font-size:12px;color:#af52de;font-weight:600">${fmt(s529Total)} current</div>` : ''}
       </div>
-      <span style="color:#8e8e93;font-size:14px">${chart529Collapsed ? '›' : '⌄'}</span>
+      <span style="color:var(--text-faint);font-size:14px">${chart529Collapsed ? '›' : '⌄'}</span>
     </div>`;
 
   if (!chart529Collapsed) {
@@ -3410,24 +3451,24 @@ function renderWindfall() {
         </div>
       </div>`;
     });
-    html += `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:#f9f9f9;font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
+    html += `<div style="display:flex;justify-content:space-between;padding:10px 16px;background:var(--surface-alt);font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
       <span>Total received</span><span style="color:#34c759">${fmt(totalIn)}</span>
     </div>`;
     if (totalIn < totalAlloc) {
       const expected = totalAlloc - totalIn;
-      html += `<div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:13px;color:#8e8e93">
+      html += `<div style="display:flex;justify-content:space-between;padding:8px 16px;font-size:13px;color:var(--text-faint)">
         <span>Remaining to receive</span><span>${fmt(expected)}</span>
       </div>`;
     }
   } else {
-    html += `<div style="padding:16px;font-size:13px;color:#8e8e93;text-align:center">No inflows logged for ${year} yet. Tap + Add to log one.</div>`;
+    html += `<div style="padding:16px;font-size:13px;color:var(--text-faint);text-align:center">No inflows logged for ${year} yet. Tap + Add to log one.</div>`;
   }
   html += '</div>';
 
   // Allocation plan section
   html += `<div class="divider" style="display:flex;justify-content:space-between;align-items:center">
     <span>Allocation plan</span>
-    <span style="font-size:12px;color:#8e8e93">Priority order</span>
+    <span style="font-size:12px;color:var(--text-faint)">Priority order</span>
   </div>`;
 
   html += '<div class="block">';
@@ -3438,9 +3479,9 @@ function renderWindfall() {
       ? `<span style="font-size:11px;color:#34c759;font-weight:600">✓ Funded</span>`
       : a.pct > 0
       ? `<span style="font-size:11px;color:#007aff">${Math.round(a.pct*100)}% funded</span>`
-      : `<span style="font-size:11px;color:#8e8e93">Unfunded</span>`;
+      : `<span style="font-size:11px;color:var(--text-faint)">Unfunded</span>`;
 
-    html += `<div style="padding:10px 16px;border-bottom:1px solid #f2f2f7">
+    html += `<div style="padding:10px 16px;border-bottom:1px solid var(--border-soft)">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px">
         <div>
           <div style="font-size:14px;font-weight:500">${a.label}</div>
@@ -3449,17 +3490,17 @@ function renderWindfall() {
         <div style="text-align:right">
           <div style="font-size:14px;font-weight:600">${fmt(a.amount)}</div>
           ${a.funded > 0 && a.funded < a.amount
-            ? `<div style="font-size:11px;color:#8e8e93">${fmt(a.funded)} of ${fmt(a.amount)}</div>`
+            ? `<div style="font-size:11px;color:var(--text-faint)">${fmt(a.funded)} of ${fmt(a.amount)}</div>`
             : ''}
         </div>
       </div>
-      <div style="background:#e5e5ea;border-radius:4px;height:6px;overflow:hidden">
+      <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
         <div style="width:${barWidth}%;background:${barColor};height:100%;border-radius:4px;transition:width .3s"></div>
       </div>
     </div>`;
   });
 
-  html += `<div style="display:flex;justify-content:space-between;padding:12px 16px;background:#f9f9f9;font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
+  html += `<div style="display:flex;justify-content:space-between;padding:12px 16px;background:var(--surface-alt);font-weight:600;font-size:14px;border-top:1px solid #f2f2f7">
     <span>Total allocated</span><span>${fmt(totalAlloc)}</span>
   </div>`;
 
@@ -3490,16 +3531,16 @@ function openAddWindfall(year) {
   modalCtx = {type: 'windfall', year};
   document.getElementById('modalAddTitle').textContent = 'Log windfall inflow';
   document.getElementById('addRows').innerHTML = `
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Source</label>
-    <input type="text" id="wfSource" placeholder="e.g. Eric bonus, Mattie extra check" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Amount</label>
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Source</label>
+    <input type="text" id="wfSource" placeholder="e.g. Eric bonus, Mattie extra check" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Amount</label>
     <input type="number" id="wfAmount" placeholder="0.00" step="0.01" min="0"
-      style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
+      style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px"
       onkeydown="if(event.key==='Enter'){event.preventDefault();saveWindfall()}">
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Date</label>
-    <input type="date" id="wfDate" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
-    <label style="font-size:13px;color:#6e6e73;margin-top:10px;display:block">Notes (optional)</label>
-    <input type="text" id="wfNotes" placeholder="e.g. Annual bonus" style="width:100%;border:1.5px solid #d1d1d6;border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Date</label>
+    <input type="date" id="wfDate" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
+    <label style="font-size:13px;color:var(--text-dim);margin-top:10px;display:block">Notes (optional)</label>
+    <input type="text" id="wfNotes" placeholder="e.g. Annual bonus" style="width:100%;border:1.5px solid var(--border);border-radius:10px;padding:11px 14px;font-size:15px;margin-top:4px">
   `;
   document.getElementById('addRemaining').style.display = 'none';
   document.getElementById('addDesc').style.display = 'none';
@@ -3596,11 +3637,11 @@ function renderInsights() {
         `<button onclick="setInsightsView('mattie')" style="padding:4px 12px;border-radius:12px;border:none;font-size:12px;font-weight:600;cursor:pointer;background:${insightsView==='mattie'?'#007aff':'#f2f2f7'};color:${insightsView==='mattie'?'#fff':'#3a3a3c'}">Mattie</button>` +
       '</div>' +
     '</div>' +
-    (lastRunStr ? `<div style="font-size:11px;color:#8e8e93;margin-bottom:12px">Last analyzed: ${lastRunStr}</div>` : '') +
+    (lastRunStr ? `<div style="font-size:11px;color:var(--text-faint);margin-bottom:12px">Last analyzed: ${lastRunStr}</div>` : '') +
     '<div id="insightsBody">' +
       (lastInsights
         ? renderInsightsBody()
-        : '<div style="text-align:center;padding:40px 20px;color:#8e8e93">' +
+        : '<div style="text-align:center;padding:40px 20px;color:var(--text-faint)">' +
             '<div style="font-size:32px;margin-bottom:12px">&#128161;</div>' +
             '<div style="font-size:15px;font-weight:600;margin-bottom:8px">No analysis yet</div>' +
             '<div style="font-size:13px">Tap Analyze to generate personalized insights based on your spending history and goals.</div>' +
@@ -3616,16 +3657,16 @@ function setInsightsView(view) {
 function renderInsightsBody() {
   if (!lastInsights) return '';
   const content = insightsView === 'eric' ? lastInsights.eric : lastInsights.mattie;
-  if (!content) return '<div style="color:#8e8e93;text-align:center;padding:20px">No content available</div>';
+  if (!content) return '<div style="color:var(--text-faint);text-align:center;padding:20px">No content available</div>';
 
   // Parse Claude's response into sections
   // Claude returns structured markdown-ish text with section headers
   const sections = parseInsightsSections(content);
 
   return sections.map(s => `
-    <div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:12px">
+    <div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:12px">
       <div style="font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:${s.color};margin-bottom:10px">${s.icon} ${s.title}</div>
-      <div style="font-size:14px;line-height:1.6;color:#3a3a3c">${s.body}</div>
+      <div style="font-size:14px;line-height:1.6;color:var(--text)">${s.body}</div>
     </div>`
   ).join('');
 }
@@ -3903,20 +3944,20 @@ function renderRetirement() {
   const p = planConfig;
   document.getElementById('retirementContent').innerHTML =
     `<div class="note"><b>${p['balance_retirement_total'] || '$449,000'}</b> current &middot; <b>${p['invested_annual'] || '$70,874'}/yr</b> contributions growing 3%/yr &middot; Monte Carlo: 1,000 scenarios (mean 9%, std 15%).</div>` +
-    `<div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">
+    `<div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div>
           <div style="font-size:14px;font-weight:600">Monte Carlo Simulation</div>
-          <div style="font-size:12px;color:#8e8e93">1,000 randomized return sequences</div>
+          <div style="font-size:12px;color:var(--text-faint)">1,000 randomized return sequences</div>
         </div>
         <button onclick="runMonteCarlo()" style="background:#007aff;color:#fff;border:none;border-radius:20px;padding:9px 22px;font-size:14px;font-weight:600;cursor:pointer">&#9654; Run</button>
       </div>
-      <div id="mcStatus" style="font-size:13px;color:#8e8e93">Tap Run to simulate 1,000 scenarios.</div>
+      <div id="mcStatus" style="font-size:13px;color:var(--text-faint)">Tap Run to simulate 1,000 scenarios.</div>
     </div>` +
     `<div id="mcResults" style="display:none">
       <div class="divider">Portfolio at milestone ages</div>
       <div id="mcCards" class="ret-grid"></div>
-      <div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">
+      <div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px">
         <div style="font-size:13px;font-weight:600;margin-bottom:4px">Portfolio growth by percentile</div>
         <canvas id="mcChart" width="340" height="200" style="width:100%;height:200px"></canvas>
         <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
@@ -3930,8 +3971,8 @@ function renderRetirement() {
       <div class="divider">Retirement income &middot; 4.7% withdrawal</div>
       <div id="mcIncome"></div>
       <div class="divider">Social Security</div>
-      <div style="background:#fff;border-radius:14px;padding:16px;margin-bottom:14px">
-        <div style="font-size:13px;color:#8e8e93;margin-bottom:12px">Verify estimates at <a href="https://ssa.gov/myaccount" style="color:#007aff">ssa.gov/myaccount</a></div>
+      <div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px">
+        <div style="font-size:13px;color:var(--text-faint);margin-bottom:12px">Verify estimates at <a href="https://ssa.gov/myaccount" style="color:#007aff">ssa.gov/myaccount</a></div>
         <div style="margin-bottom:12px">
           <div style="font-size:14px;font-weight:600;margin-bottom:8px">Eric</div>
           <div style="display:flex;gap:8px">
@@ -4101,29 +4142,29 @@ function updateSSResults() {
   if (!el) return;
 
   const note = SS.eric.age === 70
-    ? '<div style="font-size:12px;color:#1a7f37;margin-top:8px">&#9733; Waiting until 70 maximizes Eric\'s benefit + survivor protection</div>'
+    ? '<div style="font-size:12px;color:var(--tint-green-text);margin-top:8px">&#9733; Waiting until 70 maximizes Eric\'s benefit + survivor protection</div>'
     : SS.eric.age === 65
     ? '<div style="font-size:12px;color:#ff9500;margin-top:8px">&#9888; Claiming at 65 = $1,551/mo less than age 70 in today\'s dollars</div>'
     : '';
 
   el.innerHTML =
     '<div style="border-top:1px solid #f2f2f7;padding-top:10px">' +
-    '<div style="font-size:12px;color:#8e8e93;margin-bottom:8px">Future dollars &middot; 2.5%/yr COLA to claim year</div>' +
-    `<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">
-      <div><div style="color:#6e6e73">Eric at ${SS.eric.age} (${ey})</div><div style="font-size:11px;color:#8e8e93">Today: ${f(et)}/mo</div></div>
+    '<div style="font-size:12px;color:var(--text-faint);margin-bottom:8px">Future dollars &middot; 2.5%/yr COLA to claim year</div>' +
+    `<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid var(--border-soft)">
+      <div><div style="color:var(--text-dim)">Eric at ${SS.eric.age} (${ey})</div><div style="font-size:11px;color:var(--text-faint)">Today: ${f(et)}/mo</div></div>
       <span style="font-weight:600">${f(ef)}/mo</span></div>` +
-    `<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid #f9f9f9">
-      <div><div style="color:#6e6e73">Mattie at ${SS.mattie.age} (${my})</div><div style="font-size:11px;color:#8e8e93">Today: ${f(mt)}/mo</div></div>
+    `<div style="display:flex;justify-content:space-between;align-items:flex-end;font-size:14px;padding:6px 0;border-bottom:1px solid var(--border-soft)">
+      <div><div style="color:var(--text-dim)">Mattie at ${SS.mattie.age} (${my})</div><div style="font-size:11px;color:var(--text-faint)">Today: ${f(mt)}/mo</div></div>
       <span style="font-weight:600">${f(mf)}/mo</span></div>` +
-    `<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600;border-bottom:1px solid #f9f9f9">
+    `<div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:600;border-bottom:1px solid var(--border-soft)">
       <span>Combined SS (future $)</span><span style="color:#34c759">${f(combined)}/mo</span></div>` +
     (hasRun
-      ? `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid #f9f9f9"><span style="color:#6e6e73">Portfolio withdrawal (median)</span><span id="ssP">&#8212;</span></div>
+      ? `<div style="display:flex;justify-content:space-between;font-size:14px;padding:5px 0;border-bottom:1px solid var(--border-soft)"><span style="color:var(--text-dim)">Portfolio withdrawal (median)</span><span id="ssP">&#8212;</span></div>
          <div style="display:flex;justify-content:space-between;font-size:15px;padding:8px 0;font-weight:700"><span>Total retirement income</span><span style="color:#34c759" id="ssT">&#8212;</span></div>
-         <div style="font-size:11px;color:#8e8e93;margin-top:4px">SS begins ${Math.min(ey,my)}&ndash;${Math.max(ey,my)}, after the 2054 portfolio milestone</div>`
-      : '<div style="font-size:12px;color:#8e8e93;margin-top:6px">Run Monte Carlo above to see combined total.</div>') +
+         <div style="font-size:11px;color:var(--text-faint);margin-top:4px">SS begins ${Math.min(ey,my)}&ndash;${Math.max(ey,my)}, after the 2054 portfolio milestone</div>`
+      : '<div style="font-size:12px;color:var(--text-faint);margin-top:6px">Run Monte Carlo above to see combined total.</div>') +
     note +
-    '<div style="font-size:11px;color:#8e8e93;margin-top:6px">Verify actual estimates at ssa.gov/myaccount</div>' +
+    '<div style="font-size:11px;color:var(--text-faint);margin-top:6px">Verify actual estimates at ssa.gov/myaccount</div>' +
     '</div>';
 
   if (hasRun) {
@@ -4138,6 +4179,21 @@ function updateSSResults() {
   }
 }
 // ── TAB NAVIGATION ────────────────────────────────────────────────────────────
+// ── THEME ─────────────────────────────────────────────────────────────────────
+function isLightTheme() { return document.body.classList.contains('light-theme'); }
+
+function toggleTheme() {
+  const light = document.body.classList.toggle('light-theme');
+  localStorage.setItem('gv_theme', light ? 'light' : 'dark');
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.innerHTML = light ? '&#9788;' : '&#9789;';
+  // Sankey is canvas-drawn, so its colors don't follow CSS vars — redraw explicitly.
+  const tracker = document.getElementById('tracker');
+  if (tracker && tracker.classList.contains('active') && typeof trDrawSankey === 'function') {
+    trDrawSankey(trackerIdx, getTrSections());
+  }
+}
+
 function trToggleSidebar(force) {
   const sb = document.getElementById('trSidebar');
   const bg = document.getElementById('trSidebarBackdrop');
@@ -4147,49 +4203,79 @@ function trToggleSidebar(force) {
   bg.classList.toggle('open', open);
 }
 
+function trPositionFixed() {
+  const tracker = document.getElementById('tracker');
+  const tabsEl = document.querySelector('.tabs');
+  if (!tracker || !tabsEl) return;
+  const top = tabsEl.getBoundingClientRect().bottom;
+  tracker.style.top = Math.round(top) + 'px';
+}
+
 function showTab(id, el) {
   closeAllDropdowns();
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   el.classList.add('active');
+  const sbToggle = document.getElementById('trSidebarToggle');
+  if (sbToggle) sbToggle.style.display = (id === 'tracker') ? '' : 'none';
   if (id === 'tracker') {
-    // Position tracker below the header + tabs
-    const tracker = document.getElementById('tracker');
-    const tabsEl = document.querySelector('.tabs');
-    const top = tabsEl ? tabsEl.getBoundingClientRect().bottom : 96;
-    tracker.style.top = Math.round(top) + 'px';
+    trPositionFixed();
     requestAnimationFrame(() => trDrawSankey(trackerIdx, getTrSections()));
   }
   if (id === 'projection') buildProjection();
 }
 // ── AUTH ──────────────────────────────────────────────────────────────────────
+// Shared token request helper. mode 'consent' shows the full Google consent screen
+// (needed the very first time). mode '' attempts a silent refresh using the
+// browser's existing Google session — no visible screen if it succeeds.
+function requestToken(mode, onSuccess, onFail) {
+  if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
+    if (onFail) onFail(new Error('Google sign-in not ready'));
+    return;
+  }
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: SCOPES,
+    callback: resp => {
+      if (resp.error) { if (onFail) onFail(new Error(resp.error)); return; }
+      accessToken = resp.access_token;
+      localStorage.setItem('gv_token', accessToken);
+      scheduleTokenRefresh(resp.expires_in);
+      if (onSuccess) onSuccess();
+    }
+  });
+  tokenClient.requestAccessToken({prompt: mode});
+}
+
+// Proactively refresh a couple minutes before the access token expires (Google
+// tokens typically last ~1hr), so the person is far less likely to ever see a
+// 401 or get bounced back to the sign-in screen mid-session.
+let tokenRefreshTimer = null;
+function scheduleTokenRefresh(expiresInSeconds) {
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
+  const ms = Math.max(30000, ((expiresInSeconds || 3600) - 120) * 1000);
+  tokenRefreshTimer = setTimeout(() => {
+    requestToken('', () => console.log('[auth] token silently refreshed'),
+                      () => console.log('[auth] silent refresh failed — will retry on next request'));
+  }, ms);
+}
+
 function signIn() {
   const btn = document.querySelector('#authScreen button');
   if (btn) { btn.textContent = 'Signing in...'; btn.disabled = true; }
   try {
-    if (typeof google === 'undefined' || !google.accounts || !google.accounts.oauth2) {
-      if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
-      alert('Google sign-in not ready. Please refresh the page and try again.');
-      return;
-    }
-    tokenClient = google.accounts.oauth2.initTokenClient({
-      client_id: CLIENT_ID,
-      scope: SCOPES,
-      callback: async resp => {
-        if (resp.error) {
-          alert('Sign-in failed: ' + resp.error);
-          if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
-          return;
-        }
-        accessToken = resp.access_token;
-        localStorage.setItem('gv_token', accessToken);
+    requestToken('consent',
+      async () => {
         document.getElementById('authScreen').style.display = 'none';
         document.getElementById('loadingScreen').style.display = 'block';
         await initApp();
+      },
+      (e) => {
+        alert('Sign-in failed: ' + e.message);
+        if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
       }
-    });
-    tokenClient.requestAccessToken({prompt: 'consent'});
+    );
   } catch (e) {
     console.error('signIn error:', e);
     alert('Sign-in error: ' + e.message);
@@ -4198,6 +4284,7 @@ function signIn() {
 }
 
 function signOut() {
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
   if (accessToken && typeof google !== 'undefined') google.accounts.oauth2.revoke(accessToken);
   accessToken = null;
   localStorage.removeItem('gv_token');
@@ -4206,6 +4293,7 @@ function signOut() {
 }
 
 function forceSignOut() {
+  if (tokenRefreshTimer) clearTimeout(tokenRefreshTimer);
   accessToken = null;
   localStorage.removeItem('gv_token');
   location.reload();
@@ -4273,6 +4361,8 @@ async function initApp() {
     const startIdx = detectCurrentMonthIdx();
     windowStart = Math.max(0, startIdx - 2);
     try { renderTracker(startIdx); } catch(e) { console.error('renderTracker error:', e); }
+    trPositionFixed();
+    requestAnimationFrame(() => { trPositionFixed(); trDrawSankey(trackerIdx, getTrSections()); });
     try { renderMonthly(startIdx); } catch(e) { console.error('renderMonthly error:', e); }
     try { renderSnapshot(); } catch(e) { console.error('renderSnapshot error:', e); }
     try { renderWindfall(); } catch(e) { console.error('renderWindfall error:', e); }
@@ -4742,11 +4832,28 @@ const DEFAULT_PLAN_DATA = [
     try {
       await initApp();
     } catch (e) {
-      // Token likely expired — clear it and show sign-in
-      accessToken = null;
-      localStorage.removeItem('gv_token');
-      document.getElementById('loadingScreen').style.display = 'none';
-      document.getElementById('authScreen').style.display = 'block';
+      // Saved token likely expired. Before bouncing to the sign-in screen, try a
+      // silent refresh — if the browser still has an active Google session and
+      // consent was already granted, this can succeed with no visible prompt at all.
+      setLoading('Refreshing session...');
+      requestToken('',
+        async () => {
+          try {
+            await initApp();
+          } catch (e2) {
+            accessToken = null;
+            localStorage.removeItem('gv_token');
+            document.getElementById('loadingScreen').style.display = 'none';
+            document.getElementById('authScreen').style.display = 'block';
+          }
+        },
+        () => {
+          accessToken = null;
+          localStorage.removeItem('gv_token');
+          document.getElementById('loadingScreen').style.display = 'none';
+          document.getElementById('authScreen').style.display = 'block';
+        }
+      );
     }
   }
 })();
@@ -4780,6 +4887,8 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+  const themeBtn = document.getElementById('themeToggleBtn');
+  if (themeBtn) themeBtn.innerHTML = isLightTheme() ? '&#9788;' : '&#9789;';
 });
 
 </script>
