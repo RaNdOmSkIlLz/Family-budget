@@ -6,7 +6,7 @@
 // pass straight through — this app needs a live connection to actually load your
 // data, offline mode just means the shell still opens instead of a blank/error page.
 
-const CACHE_NAME = 'givens-family-finances-v1';
+const CACHE_NAME = 'givens-family-finances-v2';
 const APP_SHELL = [
   './family-finances.html',
   './manifest.json',
