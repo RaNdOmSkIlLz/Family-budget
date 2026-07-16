@@ -715,6 +715,31 @@ let lastInsights = null;   // persists until next Analyze click
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const fmt = n => '$' + (Math.abs(n) || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtWhole = n => '$' + Math.round(Math.abs(n) || 0).toLocaleString('en-US');
+
+// Parses a "month" cell from the Balance History sheet leniently — handles
+// "Jul 2026", "July 2026", "07/2026", "7/2026", "2026-07", "2026-07-01", etc.
+// Returns {parsedDate, label} using a consistent "MMM YYYY" label regardless
+// of how it was typed, so entries for the same month always group together
+// on the charts even if you and the auto-sync wrote the date differently.
+function parseBalanceDate(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  let d = new Date(s + ' 1');
+  if (isNaN(d)) d = new Date(s);
+  if (isNaN(d)) {
+    let m = s.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
+    if (m) d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, 1);
+  }
+  if (isNaN(d)) {
+    let m = s.match(/^(\d{1,2})[-\/](\d{4})$/);
+    if (m) d = new Date(parseInt(m[2]), parseInt(m[1]) - 1, 1);
+  }
+  if (isNaN(d)) return null;
+  const parsedDate = new Date(d.getFullYear(), d.getMonth(), 1);
+  if (parsedDate.getFullYear() < 2015 || parsedDate.getFullYear() > 2045) return null;
+  const label = parsedDate.toLocaleString('en-US', {month:'short'}) + ' ' + parsedDate.getFullYear();
+  return {parsedDate, label};
+}
 const fmtSigned = n => { if (n === null || n === undefined) return ''; if (Math.abs(n) < 0.005) return '✓'; return (n > 0 ? '+' : '') + fmt(n); };
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2);
 const mk = idx => months[idx]?.key || '';
@@ -3136,7 +3161,7 @@ function renderSnapshotAccounts(accounts) {
   const k529Total      = kinsleyTotal + kyleTotal + collinsTotal;
 
   const acctDetail = (accts, allowRelabel) => accts.map(a => {
-    const relabel = (allowRelabel && !a.isManual) ? '<div style="display:flex;gap:4px;margin-top:3px;margin-bottom:5px">' +
+    const relabel = (allowRelabel && !a.isManual && !a.mapping.child) ? '<div style="display:flex;gap:4px;margin-top:3px;margin-bottom:5px">' +
       ['Kinsley','Kyle','Collins'].map(kid => {
         const active = a.mapping.child === kid;
         return '<button onclick="event.stopPropagation();setAccountLabel(\'' + esc(a.accountId || '') + '\',\'' + kid + ' 529\',\'' + kid + '\',\'529\')" style="font-size:9px;padding:3px 7px;border-radius:6px;border:1px solid var(--border);background:' +
@@ -3270,8 +3295,8 @@ async function saveBalanceSnapshot(accounts) {
     // Update in-memory balanceHistory
     balanceHistory = balanceHistory.filter(b => !(b.date === monthLabel && b.source === 'plaid'));
     newRows.forEach(r => {
-      const parsed = new Date(r[0] + ' 1');
-      balanceHistory.push({date:r[0], account:r[1], type:r[2].toLowerCase(), balance:r[3], source:'plaid', parsedDate:parsed});
+      const parsed = parseBalanceDate(r[0]);
+      balanceHistory.push({date:r[0], account:r[1], type:r[2].toLowerCase(), balance:r[3], source:'plaid', parsedDate: parsed ? parsed.parsedDate : new Date()});
     });
     balanceHistory.sort((a,b) => a.parsedDate - b.parsedDate);
     console.log('[BalanceHistory] saved', newRows.length, 'records for', monthLabel);
@@ -4740,14 +4765,18 @@ async function loadTrackerData() {
     if (bhRows.length > 1) bhRows.slice(1).forEach(r => {
       if (!r[0] || !r[1] || !r[3]) return;
       if (EXCLUDED_ACCOUNT_NAMES.some(x => (r[1] || '').toLowerCase().includes(x))) return;
-      const parsed = new Date(r[0] + ' 1');
-      if (!isNaN(parsed)) balanceHistory.push({
-        date:       r[0],
+      const parsed = parseBalanceDate(r[0]);
+      if (!parsed) {
+        console.warn('[BalanceHistory] could not parse date "' + r[0] + '" for account "' + r[1] + '" — row skipped. Try a format like "Jul 2026".');
+        return;
+      }
+      balanceHistory.push({
+        date:       parsed.label,
         account:    r[1],
         type:       (r[2] || '').toLowerCase(),
         balance:    parseFloat(String(r[3]).replace(/[$,]/g, '')) || 0,
         source:     (r[4] || 'manual').toLowerCase(),
-        parsedDate: parsed,
+        parsedDate: parsed.parsedDate,
       });
     });
     balanceHistory.sort((a, b) => a.parsedDate - b.parsedDate);
