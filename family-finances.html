@@ -3112,16 +3112,21 @@ function renderSnapshotAccounts(accounts) {
   const el = document.getElementById('plaidAccountsList');
   if (!el) return;
 
-  const manualAccts = getLatestManualAccounts();
+  const liveMapped = accounts.filter(a => !a.error && !isExcludedAccount(a)).map(a => ({...a, mapping: getAccountMapping(a)}));
+
+  // Once Plaid is live-syncing an account, its manual history entries stop
+  // counting toward the CURRENT total — otherwise the same real-world balance
+  // gets added twice (once live, once from the last manual row). The manual
+  // rows themselves are left alone in Balance History for the trend chart,
+  // which stitches manual-then-Plaid data into one continuous line by name.
+  const liveNames = new Set(liveMapped.map(a => (a.mapping.label || a.name || '').trim().toLowerCase()));
+  const manualAccts = getLatestManualAccounts().filter(m => !liveNames.has((m.name || '').trim().toLowerCase()));
   if (!accounts.length && !manualAccts.length) {
     el.innerHTML = '<p style="font-size:13px;color:var(--text-faint);padding:8px 0">No accounts connected yet.</p>';
     return;
   }
 
-  const mapped = [
-    ...accounts.filter(a => !a.error && !isExcludedAccount(a)).map(a => ({...a, mapping: getAccountMapping(a)})),
-    ...manualAccts,
-  ];
+  const mapped = [...liveMapped, ...manualAccts];
   const groups = {roth:[], '401k':[], brokerage:[], hsa:[], ira:[], k529:{kinsley:[], kyle:[], collins:[]}, credit:[], other:[]};
 
   mapped.forEach(a => {
