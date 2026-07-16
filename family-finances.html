@@ -2313,6 +2313,7 @@ async function syncPlaidTransactions() {
 
     // Try to match Amazon transactions to parsed order items
     await matchAmazonOrders(trackerIdx);
+    await applyAmazonRefundCredits();
 
     const pendingCount = pendingTxns.filter(t => t.pending).length;
     const postedCount  = pendingTxns.filter(t => !t.pending).length;
@@ -2335,6 +2336,69 @@ async function syncPlaidTransactions() {
 }
 
 // ── AMAZON ORDER MATCHING ──────────────────────────────────────────────────────
+// When a return completes (AmazonOrders row status = 'returned' or
+// 'fully_returned' — which server-side now only happens once the Advance
+// Refund email arrives, not at the initial return request), and that item
+// was already categorized into the budget, this creates an offsetting credit
+// so the spend actually reflects the refund. Amazon refunds frequently go to
+// Amazon account balance rather than back to the card, so there's often no
+// matching bank transaction to net against — this is what actually applies
+// the adjustment. Runs automatically; each row is marked 'refund_applied'
+// afterward so it's never double-credited on a later sync.
+async function applyAmazonRefundCredits() {
+  try {
+    const rows = await readSheet(BUDGET_SHEET_ID, 'AmazonOrders!A:L');
+    if (!rows || rows.length < 2) return;
+    const header = rows[0];
+    const data = rows.slice(1);
+    const curIdx = detectCurrentMonthIdx();
+    let anyApplied = false;
+
+    const updated = data.map(row => {
+      const emailType = row[2], itemName = row[4];
+      const listPrice = parseFloat(row[5]) || 0;
+      const totalPrice = parseFloat(row[7]) || 0;
+      const category = row[8], status = row[9];
+
+      if (emailType !== 'order') return row;
+      if (status !== 'returned' && status !== 'fully_returned') return row;
+      if (!category) return row; // never categorized — nothing to credit against
+
+      const amt = totalPrice || listPrice;
+      if (amt <= 0) return row;
+
+      if (!budgetPlan.some(c => c.Category === category)) {
+        console.warn(`[AmazonRefunds] Category "${category}" no longer exists in budget plan — skipping credit for "${itemName}" (needs manual handling)`);
+        return row;
+      }
+
+      const txns = getTxns(curIdx, category);
+      txns.push({
+        id: uid(),
+        desc: 'Refund: ' + (itemName || 'Amazon item'),
+        amt: -Math.abs(amt),
+        ts: new Date().toISOString(),
+        splitGroupId: null,
+        src: 'plaid',
+      });
+      setTxns(curIdx, category, txns);
+      anyApplied = true;
+      console.log(`[AmazonRefunds] Applied $${amt.toFixed(2)} credit to ${category} for "${itemName}"`);
+
+      const newRow = [...row];
+      newRow[9] = 'refund_applied';
+      return newRow;
+    });
+
+    if (anyApplied) {
+      await clearAndWrite(BUDGET_SHEET_ID, 'AmazonOrders!A1', [header, ...updated]);
+      renderTracker(trackerIdx);
+    }
+  } catch(e) {
+    console.error('applyAmazonRefundCredits error:', e.message);
+  }
+}
+
 async function matchAmazonOrders(idx) {
   try {
     // Load AmazonOrders from sheet
@@ -2360,7 +2424,7 @@ async function matchAmazonOrders(idx) {
       const imageUrl   = row[11] || '';
 
       if (!orderNum || emailType !== 'order') return;
-      if (status === 'categorized' || status === 'fully_returned' || status === 'returned') return;
+      if (status === 'categorized' || status === 'fully_returned' || status === 'returned' || status === 'refund_applied') return;
 
       if (!orderMap[orderNum]) {
         orderMap[orderNum] = {
