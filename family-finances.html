@@ -3117,6 +3117,22 @@ function getLatestTrackedAccounts(excludeSource) {
 }
 function getLatestManualAccounts() { return getLatestTrackedAccounts('plaid'); }
 
+// Reads directly from Balance History (loaded at app boot, regardless of which
+// tab you open first) — latest known balance per account, summed by category.
+// Same underlying data as the Snapshot tab, just computed independently so
+// other tabs (like Retirement) don't have to wait on a Snapshot visit first.
+function getCurrentRetirementTotal() {
+  const RETIREMENT_SUBTYPES = ['roth','401k','brokerage','hsa','ira'];
+  return getLatestTrackedAccounts()
+    .filter(a => RETIREMENT_SUBTYPES.includes(a.mapping.subtype))
+    .reduce((sum, a) => sum + (a.balance || 0), 0);
+}
+function getCurrent529Total() {
+  return getLatestTrackedAccounts()
+    .filter(a => a.mapping.subtype === '529')
+    .reduce((sum, a) => sum + (a.balance || 0), 0);
+}
+
 // isLiveSync=false (default): render from whatever's already saved in the sheet
 // — no Plaid API call, so this is instant and free. Used when the Snapshot tab
 // first opens. isLiveSync=true: accounts came from an actual fresh Plaid fetch
@@ -4185,8 +4201,10 @@ Respond with exactly these 5 sections using these exact headers:
 // ── RETIREMENT ────────────────────────────────────────────────────────────────
 function renderRetirement() {
   const p = planConfig;
+  const liveTotal = getCurrentRetirementTotal();
+  const liveBalance = liveTotal > 0 ? fmt(liveTotal) : null;
   document.getElementById('retirementContent').innerHTML =
-    `<div class="note"><b>${p['balance_retirement_total'] || '$449,000'}</b> current &middot; <b>${p['invested_annual'] || '$70,874'}/yr</b> contributions growing 3%/yr &middot; Monte Carlo: 1,000 scenarios (mean 9%, std 15%).</div>` +
+    `<div class="note"><b>${liveBalance || p['balance_retirement_total'] || '$449,000'}</b> current${liveBalance ? ' (from Balance History)' : ''} &middot; <b>${p['invested_annual'] || '$70,874'}/yr</b> contributions growing 3%/yr &middot; Monte Carlo: 1,000 scenarios (mean 9%, std 15%).</div>` +
     `<div style="background:var(--surface);border-radius:14px;padding:16px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
         <div>
@@ -4247,6 +4265,26 @@ function renderRetirement() {
 }
 
 // ── MONTE CARLO ───────────────────────────────────────────────────────────────
+const ERIC_DOB   = new Date(1989, 0, 14);  // Jan 14, 1989
+const MATTIE_DOB = new Date(1989, 11, 12); // Dec 12, 1989
+
+// Precise (fractional) current age as of today — used so milestones like
+// "years until 65" shrink continuously as real time passes, rather than being
+// frozen at whatever was true the day this feature was built.
+function preciseAge(dob) {
+  const now = new Date();
+  const hadBirthdayThisYear = (now.getMonth() > dob.getMonth()) || (now.getMonth() === dob.getMonth() && now.getDate() >= dob.getDate());
+  let age = now.getFullYear() - dob.getFullYear() - (hadBirthdayThisYear ? 0 : 1);
+  const lastBday = new Date(now.getFullYear() - (hadBirthdayThisYear ? 0 : 1), dob.getMonth(), dob.getDate());
+  const nextBday = new Date(lastBday.getFullYear() + 1, dob.getMonth(), dob.getDate());
+  age += (now - lastBday) / (nextBday - lastBday);
+  return age;
+}
+
+function yearsUntilAge(dob, targetAge) {
+  return Math.max(0, targetAge - preciseAge(dob));
+}
+
 function gaussRandom(mean, std) {
   let u = 0, v = 0;
   while (!u) u = Math.random();
@@ -4259,9 +4297,27 @@ function runMonteCarlo() {
   if (btn) { btn.textContent = '⏳'; btn.disabled = true; }
   setTimeout(() => {
     const p = planConfig;
-    const START   = parseFloat((p['balance_retirement_total'] || '449000').replace(/[$,]/g, ''));
+    // Prefer the current total computed directly from Balance History (works
+    // regardless of which tab you opened first) — falls back to the manually-set
+    // Plan value only if there's no Balance History data at all yet.
+    const liveTotal = getCurrentRetirementTotal();
+    const START = liveTotal > 0 ? liveTotal : parseFloat((p['balance_retirement_total'] || '449000').replace(/[$,]/g, ''));
     const CONTRIB = parseFloat((p['invested_annual'] || '70874').replace(/[$,]/g, ''));
-    const SIMS = 1000, YEARS = 29, CG = 0.03, MEAN = 0.09, STD = 0.15;
+
+    // Milestones recomputed from today's actual date vs real birthdates, so
+    // "years until Eric is 65" genuinely shrinks year over year instead of
+    // staying frozen at whatever it was when this feature was first built.
+    const milestones = [
+      {l:'Eric 60',   dob: ERIC_DOB,   age: 60},
+      {l:'Eric 62',   dob: ERIC_DOB,   age: 62},
+      {l:'Eric 65',   dob: ERIC_DOB,   age: 65},
+      {l:'Mattie 60', dob: MATTIE_DOB, age: 60},
+      {l:'Mattie 62', dob: MATTIE_DOB, age: 62},
+      {l:'Mattie 65', dob: MATTIE_DOB, age: 65},
+    ].map(m => ({...m, y: Math.max(1, Math.round(yearsUntilAge(m.dob, m.age)))}));
+
+    const SIMS = 1000, CG = 0.03, MEAN = 0.09, STD = 0.15;
+    const YEARS = Math.max(...milestones.map(m => m.y)) + 1; // small buffer past the furthest milestone
 
     const finalBals = [];
     const yd = Array.from({length: YEARS}, () => []);
@@ -4279,10 +4335,6 @@ function runMonteCarlo() {
     const fm  = n => '$' + (n / 1e6).toFixed(2) + 'M';
     const fi  = n => '$' + Math.round(n * 0.047 / 12).toLocaleString() + '/mo';
 
-    const milestones = [
-      {l:'Eric 60',  y:23}, {l:'Eric 62',  y:25}, {l:'Eric 65', y:28},
-      {l:'Mattie 60',y:24}, {l:'Mattie 62',y:26}, {l:'Mattie 65',y:29},
-    ];
     const meds = milestones.map(m => {
       const a = [...yd[m.y - 1]].sort((a, b) => a - b);
       return pct(a, 0.5);
@@ -4292,10 +4344,12 @@ function runMonteCarlo() {
       `<div class="ret-card"><div class="ret-age">${m.l}</div><div class="ret-val">${fm(meds[i])}</div></div>`
     ).join('');
 
-    const med65 = meds[2]; // Eric 65
+    const eric65Idx = milestones.findIndex(m => m.l === 'Eric 65');
+    const med65 = meds[eric65Idx];
     const sorted = [...yd[YEARS - 1]].sort((a, b) => a - b);
     const p10 = pct(sorted, 0.1);
     const p90 = pct(sorted, 0.9);
+    const eric65Years = milestones[eric65Idx].y;
 
     document.getElementById('mcIncome').innerHTML =
       `<span id="mcPM" data-m="${Math.round(med65 * 0.047 / 12)}" style="display:none"></span>` +
@@ -4309,7 +4363,7 @@ function runMonteCarlo() {
         <div class="row"><div class="row-label">Monthly income</div><div class="row-val green" style="font-size:17px;font-weight:700">${fi(med65)}</div></div>
         <div class="row"><div class="row-label">10th percentile</div><div class="row-val orange">${fi(p10)}</div></div>
         <div class="row"><div class="row-label">90th percentile</div><div class="row-val purple">${fi(p90)}</div></div>
-        <div class="row"><div class="row-label">Expenses inflated 28yr @3%</div><div class="row-val">~$29,300/mo</div></div>
+        <div class="row"><div class="row-label">Expenses inflated ${eric65Years}yr @3%</div><div class="row-val">~$29,300/mo</div></div>
       </div>`;
 
     drawMCChart(yd, YEARS);
