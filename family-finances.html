@@ -1314,13 +1314,32 @@ function trDrawSankey(idx, sections) {
   const labelCol = isLight ? '#6e6e73' : '#9698b8';
   const firstAmtCol = isLight ? '#1c1c1e' : '#ffffff';
   const hovLabelCol = isLight ? '#1c1c1e' : '#ffffff';
-  // The last column's labels only actually render when nodes are tall enough —
-  // with more levels (e.g. drilling to individual Transactions), that column is
-  // packed with dozens of thin nodes and almost never shows text, so reserving
-  // full label width for it just wastes screen space. Shrink it as levels grow.
+  // Size the left gutter to the actual income text, so it's never clipped
+  // regardless of how large/small the number is.
+  ctx.font = `700 ${isNarrow ? 11 : 13}px -apple-system, BlinkMacSystemFont, sans-serif`;
+  const incomeNode = trSankeyNodes.find(n => n.level === 0);
+  const incomeTextW = incomeNode ? ctx.measureText(incomeNode.display || '').width : 40;
+  const PAD_L = Math.max(36, Math.min(130, Math.round(incomeTextW) + 18));
+
+  // Size the right gutter to the widest label/amount actually present at the
+  // last level — but cap it low when there are many levels (e.g. drilling to
+  // individual Transactions): that column is packed with dozens of thin nodes
+  // that mostly never render text at all (see the showLabel/showAmt height
+  // threshold below), so reserving space for it would just waste room.
   const manyLevels = levels >= 4;
-  const PAD_L = isNarrow ? 54 : 110;
-  const PAD_R = isNarrow ? (manyLevels ? 32 : 74) : (manyLevels ? 90 : 180);
+  const lastLabelSize = isNarrow ? 9 : 10;
+  const lastLabelLen  = isNarrow ? 10 : 18;
+  let maxRightW = 0;
+  if (!manyLevels) {
+    trSankeyNodes.filter(n => n.level === levels - 1).forEach(n => {
+      ctx.font = `500 ${lastLabelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      maxRightW = Math.max(maxRightW, ctx.measureText((n.label || '').substring(0, lastLabelLen)).width);
+      ctx.font = `700 ${lastLabelSize}px -apple-system, BlinkMacSystemFont, sans-serif`;
+      maxRightW = Math.max(maxRightW, ctx.measureText(n.display || '').width);
+    });
+  }
+  const rightGutterBase = manyLevels ? (isNarrow ? 28 : 80) : Math.round(maxRightW) + (isNarrow ? 16 : 22);
+  const PAD_R = Math.max(24, Math.min(isNarrow ? 100 : 200, rightGutterBase));
   const PAD_T = 14, PAD_B = 14;
   const innerW = W - PAD_L - PAD_R;
   const innerH = H - PAD_T - PAD_B;
