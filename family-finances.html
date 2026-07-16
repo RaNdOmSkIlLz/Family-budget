@@ -3150,8 +3150,8 @@ function renderSnapshotAccounts(accounts) {
   });
 
   const sum = arr => arr.reduce((s, a) => s + (a.balance || 0), 0);
-  const rothTotal      = sum(groups.roth) + sum(groups.ira);
-  const k401Total      = sum(groups['401k']);
+  const rothTotal      = sum(groups.roth);
+  const k401Total      = sum(groups['401k']) + sum(groups.ira);
   const brokerageTotal = sum(groups.brokerage);
   const hsaTotal       = sum(groups.hsa);
   const retTotal       = rothTotal + k401Total + brokerageTotal + hsaTotal;
@@ -3206,9 +3206,9 @@ function renderSnapshotAccounts(accounts) {
 
   if (!retCol) {
     html += '<div class="card4" style="margin-bottom:14px">';
-    if (rothTotal > 0)      html += subCard('Roth IRA',   rothTotal,      'roth',      [...groups.roth, ...groups.ira], '#34c759', groups.roth.length + ' account' + (groups.roth.length !== 1 ? 's' : ''));
-    if (k401Total > 0)      html += subCard('401k',       k401Total,      '401k',      groups['401k'],                 '#007aff', groups['401k'].length + ' account' + (groups['401k'].length !== 1 ? 's' : ''));
-    if (brokerageTotal > 0) html += subCard('Brokerage',  brokerageTotal, 'brokerage', groups.brokerage,               '#af52de', groups.brokerage.length + ' account' + (groups.brokerage.length !== 1 ? 's' : ''));
+    if (rothTotal > 0)      html += subCard('Tax-Free',  rothTotal,      'roth',      groups.roth,                                       '#34c759', groups.roth.length + ' account' + (groups.roth.length !== 1 ? 's' : ''));
+    if (k401Total > 0)      html += subCard('Pre-Tax',   k401Total,      '401k',      [...groups['401k'], ...groups.ira],                '#007aff', (groups['401k'].length + groups.ira.length) + ' account' + ((groups['401k'].length + groups.ira.length) !== 1 ? 's' : ''));
+    if (brokerageTotal > 0) html += subCard('After-Tax', brokerageTotal, 'brokerage', groups.brokerage,                                   '#af52de', groups.brokerage.length + ' account' + (groups.brokerage.length !== 1 ? 's' : ''));
     if (hsaTotal > 0)       html += subCard('HSA',        hsaTotal,       'hsa',       groups.hsa,                     '#ff9500', '+$6,400/yr');
     html += '</div>';
   }
