@@ -916,7 +916,7 @@ async function setAccountLabel(accountId, label, child, subtype) {
   } catch (e) {
     console.error('[AccountLabels] save failed:', e.message);
   }
-  renderSnapshotAccounts(window._lastPlaidAccounts || []);
+  renderSnapshotAccounts(window._lastPlaidAccounts || [], window._lastIsLiveSync);
 }
 
 function guessCategoryFromMerchant(name) {
@@ -3044,27 +3044,28 @@ async function syncBalances() {
     if (message && !accounts?.length) {
       if (statusEl) statusEl.textContent = message;
       if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
-      renderPlaidAccounts([]); // still show any manually-tracked accounts
+      renderSnapshotAccounts([], false); // no live data to show — fall back to cached view
+      renderBalanceCharts();
       return;
     }
-    renderPlaidAccounts(accounts || []);
+    renderSnapshotAccounts(accounts || [], true);
     if (statusEl) statusEl.textContent = 'Last synced: ' + new Date().toLocaleTimeString();
     if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
 
     // Auto-save snapshot to BalanceHistory
     await saveBalanceSnapshot(accounts || []);
+    renderBalanceCharts(); // now that live totals are known, refresh the chart header to match
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Sync error: ' + e.message;
     if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
-    renderPlaidAccounts([]); // still show any manually-tracked accounts
+    renderSnapshotAccounts([], false); // sync failed — fall back to cached view rather than showing nothing
+    renderBalanceCharts();
   }
 }
 
-function renderPlaidAccounts(accounts) { renderSnapshotAccounts(accounts); }
-
 function toggleSnapshotSection(key) {
   snapshotCollapsed[key] = !snapshotCollapsed[key];
-  renderSnapshotAccounts(window._lastPlaidAccounts || []);
+  renderSnapshotAccounts(window._lastPlaidAccounts || [], window._lastIsLiveSync);
 }
 
 function renderSnapshot() {
@@ -3085,32 +3086,59 @@ function renderSnapshot() {
     '<p id="plaidStatus" style="font-size:12px;color:var(--text-faint);margin-bottom:12px"></p>' +
     '<div id="plaidAccountsList"></div>' +
     '<div id="balanceCharts" style="margin-top:8px"></div>';
-  syncBalances();
+
+  // Show whatever's already saved in the sheet instantly — no live Plaid call.
+  // Tap "Sync Balances" to actually fetch fresh numbers from connected accounts.
+  renderSnapshotAccounts([], false);
+  const statusEl = document.getElementById('plaidStatus');
+  const lastPlaidDate = balanceHistory.filter(b => b.source === 'plaid').map(b => b.parsedDate).sort((a,b)=>b-a)[0];
+  if (statusEl) statusEl.textContent = lastPlaidDate
+    ? 'Showing balances as of last sync (' + lastPlaidDate.toLocaleString('en-US',{month:'short', year:'numeric'}) + '). Tap Sync Balances for live data.'
+    : 'Tap Sync Balances to connect and fetch live data.';
   renderBalanceCharts();
 }
 
 // Latest manually-entered balance per account (one row per account, whichever
 // month is most recent) — these are accounts you update by hand in the sheet
 // rather than through a live Plaid connection.
-function getLatestManualAccounts() {
-  const manual = balanceHistory.filter(b => b.source !== 'plaid');
+function getLatestTrackedAccounts(excludeSource) {
+  const filtered = excludeSource ? balanceHistory.filter(b => b.source !== excludeSource) : balanceHistory;
   const byAccount = {};
-  manual.forEach(b => {
+  filtered.forEach(b => {
     if (!byAccount[b.account] || b.parsedDate > byAccount[b.account].parsedDate) byAccount[b.account] = b;
   });
   return Object.values(byAccount).map(b => ({
     name: b.account,
     officialName: b.account,
     balance: b.balance,
-    isManual: true,
+    isManual: b.source !== 'plaid',
     mapping: {subtype: b.type === '403b' ? '401k' : b.type, label: b.account, child: detect529Child(b.account)},
   }));
 }
+function getLatestManualAccounts() { return getLatestTrackedAccounts('plaid'); }
 
-function renderSnapshotAccounts(accounts) {
+// isLiveSync=false (default): render from whatever's already saved in the sheet
+// — no Plaid API call, so this is instant and free. Used when the Snapshot tab
+// first opens. isLiveSync=true: accounts came from an actual fresh Plaid fetch
+// (only happens when you click "Sync Balances" or just connected a new account).
+function renderSnapshotAccounts(accounts, isLiveSync) {
   window._lastPlaidAccounts = accounts;
+  window._lastIsLiveSync = isLiveSync;
   const el = document.getElementById('plaidAccountsList');
   if (!el) return;
+
+  if (!isLiveSync) {
+    // Cached view: show the latest known balance for every tracked account —
+    // whether that balance came from Plaid or was typed in manually — without
+    // touching the live API at all.
+    const cached = getLatestTrackedAccounts();
+    if (!cached.length) {
+      el.innerHTML = '<p style="font-size:13px;color:var(--text-faint);padding:8px 0">No accounts yet — tap Sync Balances to connect and fetch live data.</p>';
+      return;
+    }
+    renderAccountGroups(cached, el);
+    return;
+  }
 
   const liveMapped = accounts.filter(a => !a.error && !isExcludedAccount(a)).map(a => ({...a, mapping: getAccountMapping(a)}));
 
@@ -3127,6 +3155,10 @@ function renderSnapshotAccounts(accounts) {
   }
 
   const mapped = [...liveMapped, ...manualAccts];
+  renderAccountGroups(mapped, el);
+}
+
+function renderAccountGroups(mapped, el) {
   const groups = {roth:[], '401k':[], brokerage:[], hsa:[], ira:[], k529:{kinsley:[], kyle:[], collins:[]}, credit:[], other:[]};
 
   mapped.forEach(a => {
@@ -3160,10 +3192,12 @@ function renderSnapshotAccounts(accounts) {
   const brokerageTotal = sum(groups.brokerage);
   const hsaTotal       = sum(groups.hsa);
   const retTotal       = rothTotal + k401Total + brokerageTotal + hsaTotal;
+  window._liveRetirementTotal = retTotal;
   const kinsleyTotal   = sum(groups.k529.kinsley);
   const kyleTotal      = sum(groups.k529.kyle);
   const collinsTotal   = sum(groups.k529.collins);
   const k529Total      = kinsleyTotal + kyleTotal + collinsTotal;
+  window._live529Total = k529Total;
 
   const acctDetail = (accts, allowRelabel) => accts.map(a => {
     const relabel = (allowRelabel && !a.isManual && !a.mapping.child) ? '<div style="display:flex;gap:4px;margin-top:3px;margin-bottom:5px">' +
@@ -3315,6 +3349,7 @@ let chartRangeRetirement = 'all';
 let chartRange529 = 'all';
 let retirementChartCollapsed = true;
 let chart529Collapsed = true;
+let chartAccountFilter = {retirement: null, s529: null};
 
 function toggleBalanceChart(type) {
   if (type === 'retirement') retirementChartCollapsed = !retirementChartCollapsed;
@@ -3326,6 +3361,24 @@ function setChartRange(type, range) {
   if (type === 'retirement') chartRangeRetirement = range;
   else chartRange529 = range;
   renderBalanceCharts();
+}
+
+function filterChartAccount(type, accountName) {
+  chartAccountFilter[type] = (chartAccountFilter[type] === accountName) ? null : accountName;
+  renderBalanceCharts();
+}
+
+// If an account has both a manual row and a Plaid row for the same month
+// (e.g. the month you switched it over to live sync), prefer the Plaid one —
+// otherwise that account's balance gets counted twice for that month, in both
+// the chart line and the "current" total shown above it.
+function getDedupedBalanceHistory() {
+  const byKey = {};
+  balanceHistory.forEach(b => {
+    const key = b.account + '|' + b.date;
+    if (!byKey[key] || (b.source === 'plaid' && byKey[key].source !== 'plaid')) byKey[key] = b;
+  });
+  return Object.values(byKey);
 }
 
 function filterByRange(data, range) {
@@ -3340,7 +3393,7 @@ function filterByRange(data, range) {
 
 function getMonthlyTotals(types, range) {
   // Sum balances by month for given account types
-  const filtered = filterByRange(balanceHistory.filter(b => types.includes(b.type)), range);
+  const filtered = filterByRange(getDedupedBalanceHistory().filter(b => types.includes(b.type)), range);
   const byMonth = {};
   filtered.forEach(b => {
     if (!byMonth[b.date]) byMonth[b.date] = {date: b.date, parsedDate: b.parsedDate, total: 0, accounts: {}};
@@ -3352,7 +3405,7 @@ function getMonthlyTotals(types, range) {
 }
 
 function getAccountSeries(types, range) {
-  const filtered = filterByRange(balanceHistory.filter(b => types.includes(b.type)), range);
+  const filtered = filterByRange(getDedupedBalanceHistory().filter(b => types.includes(b.type)), range);
   const accounts = [...new Set(filtered.map(b => b.account))];
   const dates = [...new Set(filtered.map(b => b.date))].sort((a,b) => new Date(a+' 1') - new Date(b+' 1'));
   return {accounts, dates, series: accounts.map(acct => ({
@@ -3362,6 +3415,40 @@ function getAccountSeries(types, range) {
       return entry ? entry.balance : null;
     })
   }))};
+}
+
+// Rounds a range up to a "nice" step (1/2/5 × a power of 10) so axis labels
+// land on clean numbers like 50k/100k/250k/500k/1M instead of awkward values.
+function niceStep(roughStep) {
+  if (roughStep <= 0) return 1;
+  const exp = Math.floor(Math.log10(roughStep));
+  const base = Math.pow(10, exp);
+  const frac = roughStep / base;
+  let niceFrac;
+  if (frac <= 1) niceFrac = 1;
+  else if (frac <= 2) niceFrac = 2;
+  else if (frac <= 2.5) niceFrac = 2.5;
+  else if (frac <= 5) niceFrac = 5;
+  else niceFrac = 10;
+  return niceFrac * base;
+}
+
+// Y-axis always starts at 0 per design — only the top and step size adapt to
+// the data's max value, using ~4-5 ticks.
+function niceAxisTicks(maxVal, targetTicks) {
+  targetTicks = targetTicks || 4;
+  if (maxVal <= 0) return [0, 1];
+  const step = niceStep(maxVal / targetTicks);
+  const top = Math.ceil(maxVal / step) * step;
+  const ticks = [];
+  for (let v = 0; v <= top + step * 0.5; v += step) ticks.push(Math.round(v * 100) / 100);
+  return ticks;
+}
+
+function fmtAxisLabel(v) {
+  if (Math.abs(v) >= 1000000) return '$' + (v / 1000000).toFixed(v % 1000000 === 0 ? 0 : 1) + 'M';
+  if (Math.abs(v) >= 1000) return '$' + Math.round(v / 1000) + 'k';
+  return '$' + Math.round(v);
 }
 
 function drawBalanceChart(canvasId, labels, series, colors) {
@@ -3381,22 +3468,23 @@ function drawBalanceChart(canvasId, labels, series, colors) {
   }
 
   const mx = Math.max(...allVals);
-  const mn = Math.min(...allVals) * 0.95;
+  const mn = 0; // Y-axis always starts at 0
+  const ticks = niceAxisTicks(mx, 4);
+  const axisTop = ticks[ticks.length - 1];
   const pad = {l:52, r:8, t:10, b:28};
   const cw = W - pad.l - pad.r, ch = H - pad.t - pad.b;
   const x = i => pad.l + (labels.length > 1 ? (i / (labels.length-1)) * cw : cw/2);
-  const y = v => pad.t + ch - ((v - mn) / (mx - mn || 1)) * ch;
+  const y = v => pad.t + ch - ((v - mn) / (axisTop - mn || 1)) * ch;
 
   ctx.clearRect(0,0,W,H);
 
-  // Grid lines
+  // Grid lines at nice round values
   ctx.strokeStyle = '#f0f0f0'; ctx.lineWidth = 1;
-  [0.25,0.5,0.75,1].forEach(f => {
-    const val = mn + (mx-mn)*f;
+  ticks.forEach(val => {
     const yy = y(val);
     ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W-pad.r, yy); ctx.stroke();
     ctx.fillStyle = '#8e8e93'; ctx.font = '9px -apple-system'; ctx.textAlign = 'right';
-    ctx.fillText('$'+(val/1000).toFixed(0)+'k', pad.l-3, yy+3);
+    ctx.fillText(fmtAxisLabel(val), pad.l-3, yy+3);
   });
 
   // X labels — show every other if crowded
@@ -3408,9 +3496,9 @@ function drawBalanceChart(canvasId, labels, series, colors) {
 
   // Draw each series
   series.forEach((s, si) => {
-    const color = colors[si % colors.length];
+    const color = s.color || colors[si % colors.length];
     ctx.beginPath(); ctx.strokeStyle = color;
-    ctx.lineWidth = si === 0 ? 2.5 : 1.5; // total line is thicker
+    ctx.lineWidth = (s.name === 'Total' || s.name === 'Total 529s') ? 2.5 : 1.5;
     let started = false;
     s.values.forEach((v, i) => {
       if (v === null) { started = false; return; }
@@ -3438,10 +3526,34 @@ function renderBalanceCharts() {
       style="padding:3px 9px;border-radius:12px;border:none;font-size:11px;font-weight:600;cursor:pointer;
       background:${active ? '#007aff' : '#f2f2f7'};color:${active ? '#fff' : '#3a3a3c'}">${label}</button>`;
 
+  // Builds the full series list (Total + one per account), then applies the
+  // click-to-filter selection if one is active — filtering drops the Total
+  // line and shows just that one account, so the Y-axis can rescale to its
+  // own range instead of the combined total's much larger range.
+  const buildSeries = (types, range, data, totalName, filterKey, colors) => {
+    const acctSeries = getAccountSeries(types, range);
+    const labels = data.map(d => d.date);
+    const totalSeries = {name: totalName, values: labels.map(l => data.find(d=>d.date===l)?.total ?? null)};
+    const full = [totalSeries, ...acctSeries.series].map((s, i) => ({...s, color: colors[i % colors.length]}));
+    const filter = chartAccountFilter[filterKey];
+    const active = filter ? full.filter(s => s.name === filter) : full;
+    return {labels, full, active};
+  };
+
+  const legend = (fullSeries, filterKey) => fullSeries.map(s => {
+    const isActive = chartAccountFilter[filterKey] === s.name;
+    const isDimmed = chartAccountFilter[filterKey] && !isActive;
+    return `<span onclick="filterChartAccount('${filterKey}', '${esc(s.name)}')"
+      style="font-size:10px;cursor:pointer;padding:2px 6px;border-radius:10px;
+      color:${isDimmed ? 'var(--text-faint)' : s.color};
+      background:${isActive ? 'var(--muted-chip)' : 'transparent'};
+      font-weight:${isActive ? '700' : '500'}">● ${esc(s.name)}</span>`;
+  }).join('');
+
   let html = '';
 
   // ── RETIREMENT CHART ──
-  const retTotal = retData.length ? retData[retData.length-1].total : 0;
+  const retTotal = (window._liveRetirementTotal !== undefined) ? window._liveRetirementTotal : (retData.length ? retData[retData.length-1].total : 0);
   html += `<div style="background:var(--surface);border-radius:14px;margin-bottom:12px;overflow:hidden">
     <div onclick="toggleBalanceChart('retirement')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:${retirementChartCollapsed?'none':'1px solid #f2f2f7'}">
       <div>
@@ -3451,12 +3563,9 @@ function renderBalanceCharts() {
       <span style="color:var(--text-faint);font-size:14px">${retirementChartCollapsed ? '›' : '⌄'}</span>
     </div>`;
 
+  let retBuilt;
   if (!retirementChartCollapsed) {
-    const retSeries = getAccountSeries(RETIREMENT_TYPES, chartRangeRetirement);
-    const retLabels = retData.map(d => d.date);
-    const totalSeries = [{name:'Total', values: retLabels.map(l => retData.find(d=>d.date===l)?.total || null)}];
-    const allSeries = [...totalSeries, ...retSeries.series];
-
+    retBuilt = buildSeries(RETIREMENT_TYPES, chartRangeRetirement, retData, 'Total', 'retirement', RETIREMENT_COLORS);
     html += `<div style="padding:12px 16px">
       <div style="display:flex;gap:6px;margin-bottom:10px">
         ${rangeBtn('retirement','ytd','YTD', chartRangeRetirement==='ytd')}
@@ -3465,15 +3574,16 @@ function renderBalanceCharts() {
         ${rangeBtn('retirement','all','All',chartRangeRetirement==='all')}
       </div>
       <canvas id="retChart" style="width:100%;height:200px"></canvas>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-        ${allSeries.map((s,i) => `<span style="font-size:10px;color:${RETIREMENT_COLORS[i%RETIREMENT_COLORS.length]}">● ${s.name}</span>`).join('')}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+        ${legend(retBuilt.full, 'retirement')}
       </div>
+      ${chartAccountFilter.retirement ? '<div style="font-size:10px;color:var(--text-faint);margin-top:4px">Tap the account again to show all</div>' : ''}
     </div>`;
   }
   html += '</div>';
 
   // ── 529 CHART ──
-  const s529Total = s529Data.length ? s529Data[s529Data.length-1].total : 0;
+  const s529Total = (window._live529Total !== undefined) ? window._live529Total : (s529Data.length ? s529Data[s529Data.length-1].total : 0);
   html += `<div style="background:var(--surface);border-radius:14px;margin-bottom:12px;overflow:hidden">
     <div onclick="toggleBalanceChart('529')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:${chart529Collapsed?'none':'1px solid #f2f2f7'}">
       <div>
@@ -3483,12 +3593,9 @@ function renderBalanceCharts() {
       <span style="color:var(--text-faint);font-size:14px">${chart529Collapsed ? '›' : '⌄'}</span>
     </div>`;
 
+  let s529Built;
   if (!chart529Collapsed) {
-    const s529Series = getAccountSeries(S529_TYPES, chartRange529);
-    const s529Labels = s529Data.map(d => d.date);
-    const total529Series = [{name:'Total 529s', values: s529Labels.map(l => s529Data.find(d=>d.date===l)?.total || null)}];
-    const all529Series = [...total529Series, ...s529Series.series];
-
+    s529Built = buildSeries(S529_TYPES, chartRange529, s529Data, 'Total 529s', 's529', S529_COLORS);
     html += `<div style="padding:12px 16px">
       <div style="display:flex;gap:6px;margin-bottom:10px">
         ${rangeBtn('529','ytd','YTD', chartRange529==='ytd')}
@@ -3497,27 +3604,22 @@ function renderBalanceCharts() {
         ${rangeBtn('529','all','All', chartRange529==='all')}
       </div>
       <canvas id="s529Chart" style="width:100%;height:200px"></canvas>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
-        ${all529Series.map((s,i) => `<span style="font-size:10px;color:${S529_COLORS[i%S529_COLORS.length]}">● ${s.name}</span>`).join('')}
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">
+        ${legend(s529Built.full, 's529')}
       </div>
+      ${chartAccountFilter.s529 ? '<div style="font-size:10px;color:var(--text-faint);margin-top:4px">Tap the account again to show all</div>' : ''}
     </div>`;
   }
   html += '</div>';
 
   el.innerHTML = html;
 
-  // Draw charts after DOM update
-  if (!retirementChartCollapsed) {
-    const retSeries2 = getAccountSeries(RETIREMENT_TYPES, chartRangeRetirement);
-    const retLabels2 = retData.map(d => d.date);
-    const totalS = [{name:'Total', values: retLabels2.map(l => retData.find(d=>d.date===l)?.total||null)}];
-    drawBalanceChart('retChart', retLabels2, [...totalS,...retSeries2.series], RETIREMENT_COLORS);
+  // Draw charts after DOM update, reusing the exact series already built above
+  if (!retirementChartCollapsed && retBuilt) {
+    drawBalanceChart('retChart', retBuilt.labels, retBuilt.active, RETIREMENT_COLORS);
   }
-  if (!chart529Collapsed) {
-    const s529Series2 = getAccountSeries(S529_TYPES, chartRange529);
-    const s529Labels2 = s529Data.map(d => d.date);
-    const total529S = [{name:'Total 529s', values: s529Labels2.map(l => s529Data.find(d=>d.date===l)?.total||null)}];
-    drawBalanceChart('s529Chart', s529Labels2, [...total529S,...s529Series2.series], S529_COLORS);
+  if (!chart529Collapsed && s529Built) {
+    drawBalanceChart('s529Chart', s529Built.labels, s529Built.active, S529_COLORS);
   }
 }
 // ── WINDFALL ──────────────────────────────────────────────────────────────────
