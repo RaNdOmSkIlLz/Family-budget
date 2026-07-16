@@ -659,6 +659,15 @@ const ACCOUNT_MAP = {
   '603504945': {subtype:'529',       label:'Collins 529', child:'Collins'},
 };
 
+// Accounts to fully exclude from Snapshot and Balance History — matched by
+// name/officialName substring (case-insensitive), so it works regardless of
+// exact account number.
+const EXCLUDED_ACCOUNT_NAMES = ['southwest'];
+function isExcludedAccount(acct) {
+  const n = ((acct.name || '') + ' ' + (acct.officialName || '')).toLowerCase();
+  return EXCLUDED_ACCOUNT_NAMES.some(x => n.includes(x));
+}
+
 const MERCHANT_RULES = [
   {pattern:/heb|kroger|randalls|whole foods|costco|sams club|walmart|target|aldi|trader joe|sprouts/i,           cat:'Groceries'},
   {pattern:/chick.fil|mcdonald|starbucks|chipotle|whataburger|domino|pizza|taco bell|subway|wendy|burger king|sushi|restaurant|grill|cafe|north italia|torchy|cane/i, cat:'Dining out'},
@@ -684,6 +693,7 @@ let budgetPlan = [];
 let trackerBudgets = {};
 let planConfig = {};
 let trackerData = {state:{}, transactions:{}, sinkingFunds:{}, splitGroups:{}, confirmedPlaidIds: new Set(), skippedTxns: []};
+let accountLabelOverrides = {}; // accountId -> {label, child}
 let skippedModalShowAll = false;
 let merchantMap = {};
 let pendingTxns = [];
@@ -817,6 +827,14 @@ function detectCurrentMonthIdx() {
 }
 
 function getAccountMapping(acct) {
+  // Manual label set by the person in the Snapshot tab always wins first —
+  // matched by Plaid's stable account_id, so it survives re-syncs even when
+  // the bank gives multiple accounts an identical generic nickname.
+  if (acct.accountId && accountLabelOverrides[acct.accountId]) {
+    const o = accountLabelOverrides[acct.accountId];
+    return {subtype: o.subtype || '529', label: o.label, child: o.child || null};
+  }
+
   // Try matching by account number fragments in name/officialName
   const rawName = (acct.officialName || acct.name || '');
   const name = rawName.replace(/\s/g, '');
@@ -857,6 +875,23 @@ function detect529Child(name) {
   if (n.includes('kyle'))    return 'Kyle';
   if (n.includes('collins')) return 'Collins';
   return null;
+}
+
+// Manually assign a label (and optionally a child, for 529s) to a specific
+// Plaid account — used when the bank gives multiple accounts an identical
+// generic nickname (e.g. three "529 College Savings" accounts) that can't be
+// told apart automatically.
+async function setAccountLabel(accountId, label, child, subtype) {
+  if (!accountId) return;
+  accountLabelOverrides[accountId] = {label, child: child || null, subtype: subtype || '529'};
+  try {
+    const rows = [['AccountId','Label','Child','Subtype']];
+    Object.entries(accountLabelOverrides).forEach(([id, o]) => rows.push([id, o.label, o.child || '', o.subtype || '']));
+    await clearAndWrite(BUDGET_SHEET_ID, 'AccountLabels!A1', rows);
+  } catch (e) {
+    console.error('[AccountLabels] save failed:', e.message);
+  }
+  renderSnapshotAccounts(window._lastPlaidAccounts || []);
 }
 
 function guessCategoryFromMerchant(name) {
@@ -2984,6 +3019,7 @@ async function syncBalances() {
     if (message && !accounts?.length) {
       if (statusEl) statusEl.textContent = message;
       if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
+      renderPlaidAccounts([]); // still show any manually-tracked accounts
       return;
     }
     renderPlaidAccounts(accounts || []);
@@ -2995,6 +3031,7 @@ async function syncBalances() {
   } catch (e) {
     if (statusEl) statusEl.textContent = 'Sync error: ' + e.message;
     if (syncBtn) { syncBtn.textContent = '↺ Sync Balances'; syncBtn.disabled = false; }
+    renderPlaidAccounts([]); // still show any manually-tracked accounts
   }
 }
 
@@ -3027,16 +3064,39 @@ function renderSnapshot() {
   renderBalanceCharts();
 }
 
+// Latest manually-entered balance per account (one row per account, whichever
+// month is most recent) — these are accounts you update by hand in the sheet
+// rather than through a live Plaid connection.
+function getLatestManualAccounts() {
+  const manual = balanceHistory.filter(b => b.source !== 'plaid');
+  const byAccount = {};
+  manual.forEach(b => {
+    if (!byAccount[b.account] || b.parsedDate > byAccount[b.account].parsedDate) byAccount[b.account] = b;
+  });
+  return Object.values(byAccount).map(b => ({
+    name: b.account,
+    officialName: b.account,
+    balance: b.balance,
+    isManual: true,
+    mapping: {subtype: b.type === '403b' ? '401k' : b.type, label: b.account, child: detect529Child(b.account)},
+  }));
+}
+
 function renderSnapshotAccounts(accounts) {
   window._lastPlaidAccounts = accounts;
   const el = document.getElementById('plaidAccountsList');
   if (!el) return;
-  if (!accounts.length) {
+
+  const manualAccts = getLatestManualAccounts();
+  if (!accounts.length && !manualAccts.length) {
     el.innerHTML = '<p style="font-size:13px;color:var(--text-faint);padding:8px 0">No accounts connected yet.</p>';
     return;
   }
 
-  const mapped = accounts.filter(a => !a.error).map(a => ({...a, mapping: getAccountMapping(a)}));
+  const mapped = [
+    ...accounts.filter(a => !a.error && !isExcludedAccount(a)).map(a => ({...a, mapping: getAccountMapping(a)})),
+    ...manualAccts,
+  ];
   const groups = {roth:[], '401k':[], brokerage:[], hsa:[], ira:[], k529:{kinsley:[], kyle:[], collins:[]}, credit:[], other:[]};
 
   mapped.forEach(a => {
@@ -3075,14 +3135,23 @@ function renderSnapshotAccounts(accounts) {
   const collinsTotal   = sum(groups.k529.collins);
   const k529Total      = kinsleyTotal + kyleTotal + collinsTotal;
 
-  const acctDetail = accts => accts.map(a =>
-    '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:12px;color:var(--text-dim)">' +
-    '<span>' + (a.mapping.label || a.name) + '</span>' +
-    '<span style="font-variant-numeric:tabular-nums">' + fmt(a.balance || 0) + '</span>' +
-    '</div>'
-  ).join('');
+  const acctDetail = (accts, allowRelabel) => accts.map(a => {
+    const relabel = (allowRelabel && !a.isManual) ? '<div style="display:flex;gap:4px;margin-top:3px;margin-bottom:5px">' +
+      ['Kinsley','Kyle','Collins'].map(kid => {
+        const active = a.mapping.child === kid;
+        return '<button onclick="event.stopPropagation();setAccountLabel(\'' + esc(a.accountId || '') + '\',\'' + kid + ' 529\',\'' + kid + '\',\'529\')" style="font-size:9px;padding:3px 7px;border-radius:6px;border:1px solid var(--border);background:' +
+          (active ? 'var(--tint-blue-bg)' : 'transparent') + ';color:' + (active ? 'var(--tint-blue-text)' : 'var(--text-faint)') +
+          ';cursor:pointer;font-weight:' + (active ? '700' : '500') + '">' + kid + '</button>';
+      }).join('') + '</div>' : '';
+    const manualTag = a.isManual ? '<span style="font-size:8px;color:var(--text-faint);border:1px solid var(--border);border-radius:4px;padding:1px 4px;margin-left:5px;vertical-align:middle">manual</span>' : '';
+    return '<div style="padding:3px 0;font-size:12px;color:var(--text-dim)">' +
+      '<div style="display:flex;justify-content:space-between">' +
+      '<span>' + (a.mapping.label || a.name) + manualTag + '</span>' +
+      '<span style="font-variant-numeric:tabular-nums">' + fmt(a.balance || 0) + '</span>' +
+      '</div>' + relabel + '</div>';
+  }).join('');
 
-  const subCard = (label, total, key, accts, color, sub) => {
+  const subCard = (label, total, key, accts, color, sub, allowRelabel) => {
     if (!total && !accts.length) return '';
     const col = snapshotCollapsed[key];
     return '<div class="card2" data-sskey="' + key + '" onclick="toggleSnapshotSection(this.dataset.sskey)" style="cursor:pointer">' +
@@ -3092,7 +3161,7 @@ function renderSnapshotAccounts(accounts) {
       '</div>' +
       '<div class="card-value" style="color:' + (color || '#1c1c1e') + '">' + fmt(total) + '</div>' +
       (sub ? '<div class="card-sub">' + sub + '</div>' : '') +
-      (!col && accts.length ? '<div style="margin-top:6px;border-top:1px solid #f2f2f7;padding-top:4px">' + acctDetail(accts) + '</div>' : '') +
+      (!col && accts.length ? '<div style="margin-top:6px;border-top:1px solid var(--border-soft);padding-top:4px">' + acctDetail(accts, allowRelabel) + '</div>' : '') +
       '</div>';
   };
 
@@ -3133,9 +3202,9 @@ function renderSnapshotAccounts(accounts) {
       '</div></div>';
     if (!s529Col) {
       html += '<div class="card4" style="margin-bottom:14px">';
-      if (kinsleyTotal > 0) html += subCard('Kinsley', kinsleyTotal, 'kinsley529', groups.k529.kinsley, '#af52de', '8.5 yrs to college');
-      if (kyleTotal > 0)    html += subCard('Kyle',    kyleTotal,    'kyle529',    groups.k529.kyle,    '#af52de', '10.9 yrs to college');
-      if (collinsTotal > 0) html += subCard('Collins', collinsTotal, 'collins529', groups.k529.collins, '#af52de', '14 yrs to college');
+      if (kinsleyTotal > 0) html += subCard('Kinsley', kinsleyTotal, 'kinsley529', groups.k529.kinsley, '#af52de', '8.5 yrs to college', true);
+      if (kyleTotal > 0)    html += subCard('Kyle',    kyleTotal,    'kyle529',    groups.k529.kyle,    '#af52de', '10.9 yrs to college', true);
+      if (collinsTotal > 0) html += subCard('Collins', collinsTotal, 'collins529', groups.k529.collins, '#af52de', '14 yrs to college', true);
       html += '</div>';
     }
   }
@@ -3174,28 +3243,35 @@ async function saveBalanceSnapshot(accounts) {
 
     // Remove any existing entries for this month then append new ones
     const newRows = accounts
-      .filter(a => !a.error && a.balance !== null && a.balance !== undefined)
+      .filter(a => !a.error && a.balance !== null && a.balance !== undefined && !isExcludedAccount(a))
       .map(a => {
         const mapping = getAccountMapping(a);
-        return [monthLabel, mapping.label || a.name, mapping.subtype, a.balance];
+        return [monthLabel, mapping.label || a.name, mapping.subtype, a.balance, 'Plaid'];
       });
 
     if (!newRows.length) return;
 
-    // Read existing, filter out this month, rewrite with new values
-    const existing = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:D');
-    const header = ['Date','Account','Type','Balance'];
+    // Read existing. Only ever drop rows for THIS month that were themselves
+    // Plaid-sourced — manually-entered rows (Source blank or "Manual") are
+    // preserved untouched, regardless of what month they're for. This is what
+    // stops a sync from silently wiping out balances you typed in by hand.
+    const existing = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:E');
+    const header = ['Date','Account','Type','Balance','Source'];
     const kept = existing.length > 1
-      ? existing.slice(1).filter(r => r[0] && r[0] !== monthLabel)
+      ? existing.slice(1).filter(r => {
+          if (!r[0]) return false;
+          const isPlaidRow = (r[4] || '').toLowerCase() === 'plaid';
+          return !(isPlaidRow && r[0] === monthLabel);
+        })
       : [];
 
     await clearAndWrite(BUDGET_SHEET_ID, 'BalanceHistory!A1', [header, ...kept, ...newRows]);
 
     // Update in-memory balanceHistory
-    balanceHistory = balanceHistory.filter(b => b.date !== monthLabel);
+    balanceHistory = balanceHistory.filter(b => !(b.date === monthLabel && b.source === 'plaid'));
     newRows.forEach(r => {
       const parsed = new Date(r[0] + ' 1');
-      balanceHistory.push({date:r[0], account:r[1], type:r[2].toLowerCase(), balance:r[3], parsedDate:parsed});
+      balanceHistory.push({date:r[0], account:r[1], type:r[2].toLowerCase(), balance:r[3], source:'plaid', parsedDate:parsed});
     });
     balanceHistory.sort((a,b) => a.parsedDate - b.parsedDate);
     console.log('[BalanceHistory] saved', newRows.length, 'records for', monthLabel);
@@ -3319,7 +3395,7 @@ function renderBalanceCharts() {
   const el = document.getElementById('balanceCharts');
   if (!el) return;
 
-  const RETIREMENT_TYPES = ['roth','401k','brokerage','hsa','ira'];
+  const RETIREMENT_TYPES = ['roth','401k','403b','brokerage','hsa','ira'];
   const S529_TYPES = ['529'];
   const RETIREMENT_COLORS = ['#007aff','#34c759','#ff9500','#af52de','#ff3b30','#5856d6'];
   const S529_COLORS = ['#af52de','#ff9500','#34c759','#007aff'];
@@ -4642,18 +4718,35 @@ async function loadTrackerData() {
     await ensureTabExists(BUDGET_SHEET_ID, 'SkippedTxns', ['PlaidTxnId','Merchant','Amount','Date','SkippedAt']);
   }
 
+  // Load manual account label overrides (e.g. "this generic 529 is Kyle's")
+  try {
+    const alRows = await readSheet(BUDGET_SHEET_ID, 'AccountLabels!A:D');
+    accountLabelOverrides = {};
+    if (alRows.length > 1) alRows.slice(1).forEach(r => {
+      const [accountId, label, child, subtype] = r;
+      if (!accountId) return;
+      accountLabelOverrides[accountId] = {label: label || '', child: child || null, subtype: subtype || '529'};
+    });
+    console.log('[AccountLabels] loaded', Object.keys(accountLabelOverrides).length, 'overrides');
+  } catch (e) {
+    console.log('AccountLabels tab not found, creating it:', e.message);
+    await ensureTabExists(BUDGET_SHEET_ID, 'AccountLabels', ['AccountId','Label','Child','Subtype']);
+  }
+
   // Load Balance History tab
   try {
-    const bhRows = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:D');
+    const bhRows = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:E');
     balanceHistory = [];
     if (bhRows.length > 1) bhRows.slice(1).forEach(r => {
       if (!r[0] || !r[1] || !r[3]) return;
+      if (EXCLUDED_ACCOUNT_NAMES.some(x => (r[1] || '').toLowerCase().includes(x))) return;
       const parsed = new Date(r[0] + ' 1');
       if (!isNaN(parsed)) balanceHistory.push({
         date:       r[0],
         account:    r[1],
         type:       (r[2] || '').toLowerCase(),
         balance:    parseFloat(String(r[3]).replace(/[$,]/g, '')) || 0,
+        source:     (r[4] || 'manual').toLowerCase(),
         parsedDate: parsed,
       });
     });
