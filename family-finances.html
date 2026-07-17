@@ -711,6 +711,7 @@ let windfallLog = [];      // [{year, date, source, amount, notes}]
 let windfallYears = [];    // [2026, 2027, ...]
 let windfallYearIdx = 0;   // currently selected year tab
 let balanceHistory = [];   // [{date, account, type, balance, parsedDate}]
+let balanceHistoryLoadError = null;
 let lastInsights = null;   // persists until next Analyze click
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 const fmt = n => '$' + (Math.abs(n) || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
@@ -3157,7 +3158,14 @@ function toggleSnapshotSection(key) {
 
 function renderSnapshot() {
   const p = planConfig;
+  const errorBanner = balanceHistoryLoadError
+    ? '<div style="background:var(--tint-amber-bg);color:var(--tint-amber-text);border-radius:10px;padding:10px 14px;margin-bottom:12px;font-size:12px;line-height:1.5">' +
+      '<b>⚠ Balance History didn\'t load:</b> ' + esc(balanceHistoryLoadError) +
+      '<br>This usually means a permissions issue reading that specific sheet tab, or the tab name doesn\'t match exactly. Balances below reflect whatever loaded successfully, which may be incomplete.' +
+      '</div>'
+    : '';
   document.getElementById('snapshotContent').innerHTML =
+    errorBanner +
     '<div class="divider">Overview</div>' +
     '<div class="card4">' +
       '<div class="card2"><div class="card-label">Monthly income</div><div class="card-value blue">' + (p['income_monthly'] || '$16,583') + '</div><div class="card-sub">Take-home</div></div>' +
@@ -5007,6 +5015,7 @@ async function loadTrackerData() {
   }
 
   // Load Balance History tab
+  balanceHistoryLoadError = null;
   try {
     const bhRows = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:E');
     balanceHistory = [];
@@ -5029,7 +5038,10 @@ async function loadTrackerData() {
     });
     balanceHistory.sort((a, b) => a.parsedDate - b.parsedDate);
     console.log('[BalanceHistory] loaded', balanceHistory.length, 'records');
-  } catch(e) { console.log('BalanceHistory tab not found:', e.message); }
+  } catch(e) {
+    balanceHistoryLoadError = e.message;
+    console.log('BalanceHistory tab not found:', e.message);
+  }
 
   // Load Income tab
   try {
