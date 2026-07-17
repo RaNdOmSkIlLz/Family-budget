@@ -717,24 +717,53 @@ let lastInsights = null;   // persists until next Analyze click
 const fmt = n => '$' + (Math.abs(n) || 0).toLocaleString('en-US', {minimumFractionDigits:2, maximumFractionDigits:2});
 const fmtWhole = n => '$' + Math.round(Math.abs(n) || 0).toLocaleString('en-US');
 
+const MONTH_NAMES = {
+  jan:0, january:0, feb:1, february:1, mar:2, march:2, apr:3, april:3,
+  may:4, jun:5, june:5, jul:6, july:6, aug:7, august:7,
+  sep:8, sept:8, september:8, oct:9, october:9, nov:10, november:10, dec:11, december:11,
+};
+
 // Parses a "month" cell from the Balance History sheet leniently — handles
 // "Jul 2026", "July 2026", "07/2026", "7/2026", "2026-07", "2026-07-01", etc.
 // Returns {parsedDate, label} using a consistent "MMM YYYY" label regardless
 // of how it was typed, so entries for the same month always group together
 // on the charts even if you and the auto-sync wrote the date differently.
+//
+// IMPORTANT: this deliberately does NOT lean on new Date(arbitraryString) for
+// the primary "MMM YYYY" / "Month YYYY" format — that relies on the browser's
+// own date-string parser, and different engines (Safari vs Chrome/V8) are not
+// guaranteed to agree on ambiguous strings like "Jul 2026". An explicit
+// month-name lookup below is used first instead, so parsing is identical
+// regardless of which browser/device is running it.
 function parseBalanceDate(str) {
   if (!str) return null;
   const s = String(str).trim();
+
+  // Primary format: "Jul 2026" / "July 2026" (case-insensitive), explicit lookup
+  let m = s.match(/^([A-Za-z]+)\.?\s+(\d{4})$/);
+  if (m && MONTH_NAMES.hasOwnProperty(m[1].toLowerCase())) {
+    const parsedDate = new Date(parseInt(m[2], 10), MONTH_NAMES[m[1].toLowerCase()], 1);
+    const label = parsedDate.toLocaleString('en-US', {month:'short'}) + ' ' + parsedDate.getFullYear();
+    return {parsedDate, label};
+  }
+
+  // Numeric formats: "2026-07", "2026-07-01", "07/2026", "7-2026"
+  m = s.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
+  if (m) {
+    const parsedDate = new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, 1);
+    const label = parsedDate.toLocaleString('en-US', {month:'short'}) + ' ' + parsedDate.getFullYear();
+    return {parsedDate, label};
+  }
+  m = s.match(/^(\d{1,2})[-\/](\d{4})$/);
+  if (m) {
+    const parsedDate = new Date(parseInt(m[2], 10), parseInt(m[1], 10) - 1, 1);
+    const label = parsedDate.toLocaleString('en-US', {month:'short'}) + ' ' + parsedDate.getFullYear();
+    return {parsedDate, label};
+  }
+
+  // Last resort: native parsing, for anything genuinely unusual
   let d = new Date(s + ' 1');
   if (isNaN(d)) d = new Date(s);
-  if (isNaN(d)) {
-    let m = s.match(/^(\d{4})[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
-    if (m) d = new Date(parseInt(m[1]), parseInt(m[2]) - 1, 1);
-  }
-  if (isNaN(d)) {
-    let m = s.match(/^(\d{1,2})[-\/](\d{4})$/);
-    if (m) d = new Date(parseInt(m[2]), parseInt(m[1]) - 1, 1);
-  }
   if (isNaN(d)) return null;
   const parsedDate = new Date(d.getFullYear(), d.getMonth(), 1);
   if (parsedDate.getFullYear() < 2015 || parsedDate.getFullYear() > 2045) return null;
@@ -5019,11 +5048,14 @@ async function loadTrackerData() {
   try {
     const bhRows = await readSheet(BUDGET_SHEET_ID, 'BalanceHistory!A:E');
     balanceHistory = [];
+    let unparsedCount = 0, unparsedSample = null;
     if (bhRows.length > 1) bhRows.slice(1).forEach(r => {
       if (!r[0] || !r[1] || !r[3]) return;
       if (EXCLUDED_ACCOUNT_NAMES.some(x => (r[1] || '').toLowerCase().includes(x))) return;
       const parsed = parseBalanceDate(r[0]);
       if (!parsed) {
+        unparsedCount++;
+        if (!unparsedSample) unparsedSample = r[0];
         console.warn('[BalanceHistory] could not parse date "' + r[0] + '" for account "' + r[1] + '" — row skipped. Try a format like "Jul 2026".');
         return;
       }
@@ -5037,6 +5069,14 @@ async function loadTrackerData() {
       });
     });
     balanceHistory.sort((a, b) => a.parsedDate - b.parsedDate);
+    // Surface this in the UI, not just the console — a silent per-row parse
+    // failure that empties out balanceHistory without throwing is exactly the
+    // kind of thing that's otherwise invisible without a hooked-up debugger.
+    if (unparsedCount > 0 && balanceHistory.length === 0) {
+      balanceHistoryLoadError = `Found ${bhRows.length - 1} row(s) but couldn't parse the date on any of them (e.g. "${unparsedSample}"). Check the Date column format.`;
+    } else if (unparsedCount > 0) {
+      console.warn(`[BalanceHistory] ${unparsedCount} row(s) skipped due to unparseable dates (e.g. "${unparsedSample}")`);
+    }
     console.log('[BalanceHistory] loaded', balanceHistory.length, 'records');
   } catch(e) {
     balanceHistoryLoadError = e.message;
