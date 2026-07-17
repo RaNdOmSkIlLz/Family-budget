@@ -2345,6 +2345,22 @@ async function syncPlaidTransactions() {
 // matching bank transaction to net against — this is what actually applies
 // the adjustment. Runs automatically; each row is marked 'refund_applied'
 // afterward so it's never double-credited on a later sync.
+//
+// The credit lands in the month the ORIGINAL PURCHASE was made, not whenever
+// the refund happens to complete — a regular category's monthly budget only
+// means something if spend is attributed to the right month. Falls back to
+// the current month only if the purchase date is outside the range of months
+// this budget currently tracks (e.g. an old order from before tracking
+// started) — in that one case there's nowhere correct to put it anyway.
+function findMonthIdxForDate(dateStr) {
+  if (!dateStr) return null;
+  const d = new Date(dateStr);
+  if (isNaN(d)) return null;
+  const y = d.getFullYear(), m = d.getMonth() + 1;
+  const idx = months.findIndex(mo => mo.year === y && mo.month === m);
+  return idx !== -1 ? idx : null;
+}
+
 async function applyAmazonRefundCredits() {
   try {
     const rows = await readSheet(BUDGET_SHEET_ID, 'AmazonOrders!A:L');
@@ -2355,6 +2371,7 @@ async function applyAmazonRefundCredits() {
     let anyApplied = false;
 
     const updated = data.map(row => {
+      const orderDate = row[1];
       const emailType = row[2], itemName = row[4];
       const listPrice = parseFloat(row[5]) || 0;
       const totalPrice = parseFloat(row[7]) || 0;
@@ -2372,7 +2389,13 @@ async function applyAmazonRefundCredits() {
         return row;
       }
 
-      const txns = getTxns(curIdx, category);
+      const purchaseIdx = findMonthIdxForDate(orderDate);
+      const targetIdx = purchaseIdx !== null ? purchaseIdx : curIdx;
+      if (purchaseIdx === null) {
+        console.warn(`[AmazonRefunds] Purchase date "${orderDate}" for "${itemName}" isn't in a tracked month — crediting current month instead`);
+      }
+
+      const txns = getTxns(targetIdx, category);
       txns.push({
         id: uid(),
         desc: 'Refund: ' + (itemName || 'Amazon item'),
@@ -2381,9 +2404,9 @@ async function applyAmazonRefundCredits() {
         splitGroupId: null,
         src: 'plaid',
       });
-      setTxns(curIdx, category, txns);
+      setTxns(targetIdx, category, txns);
       anyApplied = true;
-      console.log(`[AmazonRefunds] Applied $${amt.toFixed(2)} credit to ${category} for "${itemName}"`);
+      console.log(`[AmazonRefunds] Applied $${amt.toFixed(2)} credit to ${category} (${months[targetIdx]?.label || targetIdx}) for "${itemName}"`);
 
       const newRow = [...row];
       newRow[9] = 'refund_applied';
