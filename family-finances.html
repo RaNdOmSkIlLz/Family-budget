@@ -979,7 +979,7 @@ function guessCategoryFromMerchant(name) {
 function esc(s) { return (s || '').replace(/'/g, "\\'").replace(/"/g, '&quot;'); }
 // ── SINKING FUND LOGIC ────────────────────────────────────────────────────────
 function getSFRecord(cat) {
-  return trackerData.sinkingFunds[cat] || {isActive:false, activeFrom:0, runningBalance:0};
+  return trackerData.sinkingFunds[cat] || {isActive:false, activeFrom:0, resetFromMonth:null};
 }
 
 function isSinking(cat) {
@@ -990,29 +990,62 @@ function isSinking(cat) {
 function setSinkingFlag(cat, val, fromMonthIdx) {
   const rec = getSFRecord(cat);
   if (val) {
-    trackerData.sinkingFunds[cat] = {isActive:true, activeFrom:fromMonthIdx, runningBalance: rec.runningBalance || 0};
+    trackerData.sinkingFunds[cat] = {isActive:true, activeFrom:fromMonthIdx, resetFromMonth: rec.resetFromMonth ?? null};
   } else {
     trackerData.sinkingFunds[cat] = {...rec, isActive:false};
   }
   scheduleSave();
 }
 
-function getSinkingBalance(cat) {
-  return parseFloat(getSFRecord(cat).runningBalance) || 0;
+// Live rolling carryover for a sinking-fund category as of month `idx` — the
+// sum of (budget - actual) for every month from when it was activated (or
+// last reset, whichever is later) up through the month BEFORE idx. This is
+// computed fresh every render, not accumulated via manual clicks, so editing
+// spending in any past month automatically ripples forward into every later
+// month's effective budget — exactly like a real sinking fund balance would.
+function getSinkingCarryover(cat, idx) {
+  const rec = getSFRecord(cat);
+  if (!rec.isActive) return 0;
+  const startIdx = Math.max(rec.activeFrom || 0, rec.resetFromMonth ?? 0);
+  let carry = 0;
+  for (let m = startIdx; m < idx; m++) {
+    if (m < 0 || m >= months.length) continue;
+    carry += getBudget(m, cat) - (getActual(m, cat) || 0);
+  }
+  return carry;
 }
 
-function updateSinkingRunningBalance(cat, delta) {
+// "Reset balance to 0" — sets this month as the new starting point for the
+// rolling carryover, so this month gets the full budget with no carryover
+// applied, and future months only accumulate carryover from here forward.
+// Works the same way whether the balance was positive or negative.
+async function resetSinkingBalance(idx, cat) {
+  closeAllDropdowns();
+  const before = getSinkingCarryover(cat, idx);
   const rec = getSFRecord(cat);
-  trackerData.sinkingFunds[cat] = {...rec, runningBalance: (parseFloat(rec.runningBalance) || 0) + delta};
+  trackerData.sinkingFunds[cat] = {...rec, resetFromMonth: idx};
   scheduleSave();
-}
-
-function zeroNegativeSinkingCarryover(cat, idx) {
-  const rec = getSFRecord(cat);
-  if ((parseFloat(rec.runningBalance) || 0) >= 0) return;
-  trackerData.sinkingFunds[cat] = {...rec, runningBalance: 0};
-  scheduleSave();
+  try {
+    await logSinkingReset(cat, idx, before);
+  } catch(e) {
+    console.error('Failed to log sinking fund reset:', e.message);
+  }
   renderTracker(idx);
+}
+
+async function logSinkingReset(cat, idx, balanceBeforeReset) {
+  const row = [cat, months[idx]?.label || idx, new Date().toISOString(), balanceBeforeReset.toFixed(2)];
+  const header = ['Category','Month','ResetAt','BalanceBeforeReset'];
+  try {
+    const existing = await readSheet(BUDGET_SHEET_ID, 'SinkingFundResetLog!A:D');
+    const rows = existing.length ? existing.slice(1) : [];
+    rows.push(row);
+    await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFundResetLog!A1', [header, ...rows]);
+  } catch(e) {
+    console.log('SinkingFundResetLog tab not found, creating it:', e.message);
+    await ensureTabExists(BUDGET_SHEET_ID, 'SinkingFundResetLog', header);
+    await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFundResetLog!A1', [header, row]);
+  }
 }
 // ── TRACKER STATE ─────────────────────────────────────────────────────────────
 function getState(idx, cat) {
@@ -1651,7 +1684,7 @@ function trBuildDetail(idx, sections) {
     const st = getState(idx, cat.Category);
     const lockedAmt = st.isClosed ? budget : budget; // budget already locked by closeCategory
     const sf = isSinking(cat.Category);
-    const sfBal = sf ? getSinkingBalance(cat.Category) : 0;
+    const sfBal = sf ? getSinkingCarryover(cat.Category, idx) : 0;
     const effectiveBudget = budget + sfBal;
     const cv = trCatVal(cat, idx);
     const pct = effectiveBudget > 0 ? Math.min(Math.round(actual / effectiveBudget * 100), 120) : 0;
@@ -1684,6 +1717,11 @@ function trBuildDetail(idx, sections) {
         subNote = `<div style="font-size:10px;color:#34d47c;margin-top:4px">🔒 Freed ${fmt(freed)} back to available</div>`;
       }
     }
+    // Sinking fund carryover — previously invisible; now shown directly so
+    // it's clear why the effective budget differs from the plain monthly amount
+    if (sf && Math.abs(sfBal) > 0.5) {
+      subNote += `<div style="font-size:10px;color:${sfBal>=0?'#34d47c':'#ef476f'};margin-top:4px">🐷 ${sfBal>=0?'+':''}${fmt(sfBal)} carried ${sfBal>=0?'forward':'deficit'} · ${fmt(effectiveBudget)} available this month</div>`;
+    }
 
     html += `<div class="tr-cat-card ${cardClass}" data-ci="${ci}" onclick="trHandleCardClick(event,this)">
       <div class="tr-cc-top">
@@ -1698,6 +1736,7 @@ function trBuildDetail(idx, sections) {
             <button class="tr-cc-menu" onclick="toggleDropdown('trdd_${esc(cat.Category)}')">⋮</button>
             <div class="dropdown" id="trdd_${esc(cat.Category)}">
               <div class="dd-item" onclick="toggleSinking(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${sf?'✅':'⬜'}</span>${sf?'Remove sinking':'Mark sinking fund'}</div>
+              ${sf ? `<div class="dd-item" onclick="if(confirm('Reset ${esc(cat.Category)} carryover to \$0 starting this month?'))resetSinkingBalance(${idx},'${esc(cat.Category)}')"><span class="dd-icon">🔄</span>Reset balance to 0</div>` : ''}
               ${budgetChanged ? `<div class="dd-item" onclick="resetBudget(${idx},'${esc(cat.Category)}')"><span class="dd-icon">↩️</span>Reset to plan (${fmt(planBudget)})</div>` : ''}
               <div class="dd-item" onclick="${st.isClosed?'reopenCategory':'closeCategory'}(${idx},'${esc(cat.Category)}')"><span class="dd-icon">${st.isClosed?'🔓':'🔒'}</span>${st.isClosed?'Reopen':'Close'}</div>
             </div>
@@ -1927,9 +1966,6 @@ function closeCategory(idx, cat) {
 
   setState(idx, cat, {isClosed: true, preCloseBudget: budget});
 
-  if (isSinking(cat)) {
-    updateSinkingRunningBalance(cat, budget - actual);
-  }
   scheduleSave();
   renderTracker(idx);
 }
@@ -1945,10 +1981,6 @@ function reopenCategory(idx, cat) {
     const restoreTo = st.preCloseBudget || getPlanBudget(idx, cat);
     if (!trackerBudgets[k]) trackerBudgets[k] = {};
     trackerBudgets[k][cat] = restoreTo;
-    if (isSinking(cat)) {
-      const actual = getActual(idx, cat) || 0;
-      updateSinkingRunningBalance(cat, -(restoreTo - actual));
-    }
   }
 
   setState(idx, cat, {isClosed: false, preCloseBudget: undefined});
@@ -4987,7 +5019,7 @@ async function loadTrackerData() {
     trackerData.sinkingFunds[r[0]] = {
       isActive:       r[1] === 'TRUE',
       activeFrom:     parseInt(r[2]) || 0,
-      runningBalance: parseFloat(r[3]) || 0
+      resetFromMonth: (r[3] !== undefined && r[3] !== '') ? parseInt(r[3]) : null,
     };
   });
 
@@ -5157,9 +5189,9 @@ async function saveAll() {
     );
 
     // Sinking funds
-    const sfRows = [['Category','IsActive','ActiveFrom','RunningBalance']];
+    const sfRows = [['Category','IsActive','ActiveFrom','ResetFromMonth']];
     Object.entries(trackerData.sinkingFunds).forEach(([cat, rec]) => {
-      if (typeof rec === 'object') sfRows.push([cat, rec.isActive ? 'TRUE' : 'FALSE', rec.activeFrom || 0, rec.runningBalance || 0]);
+      if (typeof rec === 'object') sfRows.push([cat, rec.isActive ? 'TRUE' : 'FALSE', rec.activeFrom || 0, rec.resetFromMonth ?? '']);
     });
 
     // Tracker budget overrides
@@ -5215,7 +5247,7 @@ async function setupBudgetSheet() {
     await clearAndWrite(BUDGET_SHEET_ID, 'Budget!A1',          [headers, ...DEFAULT_BUDGET_DATA]);
     await clearAndWrite(BUDGET_SHEET_ID, 'CategoryState!A1',   [['Month','Category','IsSpent','IsClosed','SurplusCovered']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'Transactions!A1',    [['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated']]);
-    await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFunds!A1',    [['Category','IsActive','ActiveFrom','RunningBalance']]);
+    await clearAndWrite(BUDGET_SHEET_ID, 'SinkingFunds!A1',    [['Category','IsActive','ActiveFrom','ResetFromMonth']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'TrackerBudgets!A1',  [['Month','Category','Amount']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     [['Key','Label','YearMonth']]);
     await clearAndWrite(BUDGET_SHEET_ID, 'SkippedTxns!A1',     [['PlaidTxnId','Merchant','Amount','Date','SkippedAt']]);
