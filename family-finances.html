@@ -617,6 +617,14 @@ const BUDGET_SHEET_ID = '1D_XgQLNrHjhiXB-CYofe1ebRZ_EZNn45f9r4Ep0nolg';
 const PLAN_SHEET_ID = '104QB8VvA_S40JQtfCdHeln2WsamoenJFSblBzAQGuDg';
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const PLAID_SERVER = 'https://family-budget-server.vercel.app';
+// Sent as a header on every call to PLAID_SERVER. This is NOT a cryptographically
+// secure secret — it lives in client-side JS, so anyone who specifically opens
+// dev tools and reads this file can extract it. What it DOES do is close off
+// casual/automated discovery: without this, the server's endpoints (bank
+// balances, transactions, etc.) would answer ANY request from ANYONE who found
+// the URL, no effort required. This value must match APP_SECRET set in the
+// Vercel project's environment variables.
+const APP_SECRET = 'VMeHjoq7K25AGbYgoEJ5HbqR6hNnFqmi';
 const WINDOW_SIZE = 6;
 const SAVING_SECTIONS = ['529s', 'Kids Cars & Weddings', 'Savings Goals', 'Savings'];
 const EXCLUDED_SECTION = 'Excluded'; // Categories in this section are excluded from all budget math
@@ -2007,6 +2015,7 @@ function deleteTxn(idx, cat, ti) {
   const txns = getTxns(idx, cat);
   txns.splice(ti, 1);
   setTxns(idx, cat, txns);
+  transactionsNeedFullRewrite = true;
   clearTimeout(syncTimer);
   saveAll();
   renderTracker(idx);
@@ -2116,6 +2125,8 @@ function saveAdd() {
   if (!splits.length) return;
 
   const savedIdx = modalCtx.idx;
+  const monthKey = mk(savedIdx);
+  const isEditing = (modalCtx.editCat !== undefined && modalCtx.editTi !== undefined) || modalCtx.editSplitGroup;
 
   // If editing — delete the old transaction(s) first
   if (modalCtx.editSplitGroup) {
@@ -2124,25 +2135,35 @@ function saveAdd() {
       const filtered = getTxns(savedIdx, c.Category).filter(t => t.splitGroupId !== modalCtx.editSplitGroup);
       setTxns(savedIdx, c.Category, filtered);
     });
+    transactionsNeedFullRewrite = true;
   } else if (modalCtx.editCat !== undefined && modalCtx.editTi !== undefined) {
     // Remove the single transaction being edited
     const txns = getTxns(savedIdx, modalCtx.editCat);
     txns.splice(modalCtx.editTi, 1);
     setTxns(savedIdx, modalCtx.editCat, txns);
+    transactionsNeedFullRewrite = true;
   }
 
   // Save new transaction(s)
   const sgId = splits.length > 1 ? 'sg_' + uid() : null;
-  const isEditing = (modalCtx.editCat !== undefined && modalCtx.editTi !== undefined) || modalCtx.editSplitGroup;
   const src = isEditing ? (modalCtx.wasSrc || 'manual') : 'manual';
   splits.forEach(s => {
     const txns = getTxns(savedIdx, s.cat);
-    const existingId = (modalCtx.editCat === s.cat && modalCtx.editTi !== undefined)
-      ? undefined : undefined; // always new id on save
-    txns.push({id: uid(), desc, amt: s.amt, ts: new Date().toISOString(), splitGroupId: sgId, src});
-    setTxns(savedIdx, s.cat, txns);
+    const newTxn = {id: uid(), desc, amt: s.amt, ts: new Date().toISOString(), splitGroupId: sgId, src};
+    txns.push(newTxn);
+    if (isEditing) {
+      // Part of an edit — already covered by the full rewrite triggered above,
+      // no need to also append (the full rewrite is authoritative either way).
+      setTxns(savedIdx, s.cat, txns);
+    } else {
+      // Pure new addition — safe to append without touching anything else.
+      trackerData.transactions[monthKey] = trackerData.transactions[monthKey] || {};
+      trackerData.transactions[monthKey][s.cat] = txns;
+      queueTransactionAppend(monthKey, s.cat, newTxn);
+    }
     expandedCats.add(s.cat);
   });
+  if (!isEditing) scheduleSave(); // still saves other tabs (e.g. category state) if needed
 
   closeModal();
   renderTracker(savedIdx);
@@ -2457,16 +2478,20 @@ async function applyAmazonRefundCredits() {
         console.warn(`[AmazonRefunds] Purchase date "${orderDate}" for "${itemName}" isn't in a tracked month — crediting current month instead`);
       }
 
+      const monthKey = mk(targetIdx);
       const txns = getTxns(targetIdx, category);
-      txns.push({
+      const newTxn = {
         id: uid(),
         desc: 'Refund: ' + (itemName || 'Amazon item'),
         amt: -Math.abs(amt),
         ts: new Date().toISOString(),
         splitGroupId: null,
         src: 'plaid',
-      });
-      setTxns(targetIdx, category, txns);
+      };
+      txns.push(newTxn);
+      trackerData.transactions[monthKey] = trackerData.transactions[monthKey] || {};
+      trackerData.transactions[monthKey][category] = txns;
+      queueTransactionAppend(monthKey, category, newTxn);
       anyApplied = true;
       console.log(`[AmazonRefunds] Applied $${amt.toFixed(2)} credit to ${category} (${months[targetIdx]?.label || targetIdx}) for "${itemName}"`);
 
@@ -2969,11 +2994,15 @@ function confirmPendingTxn(idx) {
       return;
     }
     const sgId = 'sg_' + uid();
+    const monthKey = mk(trackerIdx);
     txn.splits.forEach(sp => {
       if (!sp.cat || !sp.amt) return;
       const txns = getTxns(trackerIdx, sp.cat);
-      txns.push({id: txn.id + '_' + sp.cat, desc: txn.merchant, amt: parseFloat(sp.amt), ts: txn.date + 'T12:00:00.000Z', splitGroupId: sgId, autoGenerated: false, src: 'plaid'});
-      setTxns(trackerIdx, sp.cat, txns);
+      const newTxn = {id: txn.id + '_' + sp.cat, desc: txn.merchant, amt: parseFloat(sp.amt), ts: txn.date + 'T12:00:00.000Z', splitGroupId: sgId, autoGenerated: false, src: 'plaid'};
+      txns.push(newTxn);
+      trackerData.transactions[monthKey] = trackerData.transactions[monthKey] || {};
+      trackerData.transactions[monthKey][sp.cat] = txns;
+      queueTransactionAppend(monthKey, sp.cat, newTxn);
     });
   } else {
     const sel = document.getElementById('pending_cat_' + idx);
@@ -2992,12 +3021,17 @@ function confirmPendingTxn(idx) {
       if (replace) {
         const cleaned = getTxns(trackerIdx, cat).filter(t => t.id !== placeholder.id);
         setTxns(trackerIdx, cat, cleaned);
+        transactionsNeedFullRewrite = true; // removing an existing row needs a real rewrite
       }
     }
 
+    const monthKey = mk(trackerIdx);
     const txns = getTxns(trackerIdx, cat);
-    txns.push({id: txn.id, desc: txn.merchant, amt: txn.amount, ts: txn.date + 'T12:00:00.000Z', splitGroupId: null, autoGenerated: false, src: 'plaid'});
-    setTxns(trackerIdx, cat, txns);
+    const newTxn = {id: txn.id, desc: txn.merchant, amt: txn.amount, ts: txn.date + 'T12:00:00.000Z', splitGroupId: null, autoGenerated: false, src: 'plaid'};
+    txns.push(newTxn);
+    trackerData.transactions[monthKey] = trackerData.transactions[monthKey] || {};
+    trackerData.transactions[monthKey][cat] = txns;
+    queueTransactionAppend(monthKey, cat, newTxn);
   }
   trackerData.confirmedPlaidIds.add(txn.id);
   pendingTxns.splice(idx, 1);
@@ -3145,7 +3179,7 @@ async function connectAccount() {
   if (btn) { btn.textContent = '⏳ Loading...'; btn.disabled = true; }
   try {
     await loadPlaidScript();
-    const r = await fetch(PLAID_SERVER + '/api/create-link-token');
+    const r = await fetch(PLAID_SERVER + '/api/create-link-token', {headers: {'X-App-Secret': APP_SECRET}});
     const {link_token, error} = await r.json();
     if (error) throw new Error(JSON.stringify(error));
 
@@ -3156,7 +3190,7 @@ async function connectAccount() {
         document.getElementById('plaidStatus').textContent = 'Saving ' + institution + '...';
         const ex = await fetch(PLAID_SERVER + '/api/exchange-token', {
           method: 'POST',
-          headers: {'Content-Type': 'application/json'},
+          headers: {'Content-Type': 'application/json', 'X-App-Secret': APP_SECRET},
           body: JSON.stringify({public_token, institution_name: institution})
         });
         const exRes = await ex.json();
@@ -3187,7 +3221,7 @@ async function syncBalances() {
   if (syncBtn) { syncBtn.textContent = '⏳ Syncing...'; syncBtn.disabled = true; }
   if (statusEl) statusEl.textContent = 'Fetching balances...';
   try {
-    const r = await fetch(PLAID_SERVER + '/api/get-balances');
+    const r = await fetch(PLAID_SERVER + '/api/get-balances', {headers: {'X-App-Secret': APP_SECRET}});
     const {accounts, message, error} = await r.json();
     if (error) throw new Error(JSON.stringify(error));
     if (message && !accounts?.length) {
@@ -4346,7 +4380,7 @@ Respond with exactly these 5 sections using these exact headers:
   // Call through Vercel proxy — API key stays secure on server
   const response = await fetch(PLAID_SERVER + '/api/insights', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', 'X-App-Secret': APP_SECRET},
     body: JSON.stringify({systemPrompt, userPrompt}),
   });
 
@@ -5154,8 +5188,85 @@ async function loadTrackerData() {
     yearSet.add(2026); // always include 2026
     windfallYears = [...yearSet].sort();
   } catch(e) { console.log('WindfallLog tab not found:', e.message); windfallYears = [2026]; }
+
+  // Record the current save stamp so the first save this session can detect
+  // whether anyone else has saved in between.
+  lastKnownSaveStamp = await readSaveStamp();
 }
 // ── SAVE ──────────────────────────────────────────────────────────────────────
+// ── CONCURRENT-SAFE TRANSACTION APPENDS ────────────────────────────────────────
+// Adding a brand-new transaction never needs to read or rewrite anything else —
+// it's always safe to just add a row at the end. This queue + flush mechanism
+// does exactly that, completely independent of the heavier "rewrite everything"
+// save used for edits/deletes/budget changes/etc. Two people adding different
+// transactions at the same moment can both succeed with no collision, since
+// neither write depends on or touches the other's data. (There's a very small
+// residual race if both appends land in the exact same instant and compute the
+// same next-row number — full atomic dedup would need Google's native append
+// API, which this project deliberately avoids elsewhere due to it misplacing
+// writes on this particular sheet. This still shrinks the collision window
+// from "however long the debounced full save takes" down to roughly one
+// network round-trip.)
+let pendingTxnAppends = [];
+let appendFlushTimer = null;
+let transactionsNeedFullRewrite = false; // set true only by edits/deletes, never by pure adds
+
+function queueTransactionAppend(monthKey, cat, txn) {
+  pendingTxnAppends.push([txn.id, monthKey, cat, txn.desc, txn.amt, txn.ts, txn.splitGroupId || '', txn.autoGenerated ? 'TRUE' : 'FALSE', txn.src || '']);
+  clearTimeout(appendFlushTimer);
+  appendFlushTimer = setTimeout(flushPendingAppends, 800);
+  setSyncStatus('syncing');
+}
+
+async function flushPendingAppends() {
+  if (!pendingTxnAppends.length) return;
+  const rows = pendingTxnAppends.splice(0, pendingTxnAppends.length);
+  try {
+    const colA = await readSheet(BUDGET_SHEET_ID, 'Transactions!A:A');
+    const nextRow = colA.length + 1;
+    await writeSheet(BUDGET_SHEET_ID, 'Transactions!A' + nextRow, rows);
+    await bumpSaveStamp();
+    setSyncStatus('ok');
+  } catch(e) {
+    console.error('Transaction append failed, will retry on next save:', e.message);
+    pendingTxnAppends.unshift(...rows);
+    setSyncStatus('error');
+  }
+}
+
+// ── CONFLICT DETECTION FOR FULL-REWRITE SAVES ─────────────────────────────────
+// Edits/deletes/budget changes/etc. still rewrite whole sheet tabs from local
+// memory — which could silently overwrite someone else's changes made in the
+// meantime. A timestamp gets stamped on every successful save; right before
+// the next one, we check whether that stamp has moved since we last knew about
+// it. If it has, someone else has saved since we loaded, and we warn instead
+// of silently clobbering whatever they added.
+let lastKnownSaveStamp = null;
+
+async function readSaveStamp() {
+  try {
+    const rows = await readSheet(BUDGET_SHEET_ID, 'SaveMeta!A2:A2');
+    return (rows && rows[0] && rows[0][0]) || null;
+  } catch(e) {
+    return null; // tab doesn't exist yet — treat as "no conflict possible"
+  }
+}
+
+async function bumpSaveStamp() {
+  const stamp = new Date().toISOString();
+  try {
+    await writeSheet(BUDGET_SHEET_ID, 'SaveMeta!A2', [[stamp]]);
+  } catch(e) {
+    try {
+      await ensureTabExists(BUDGET_SHEET_ID, 'SaveMeta', ['LastSavedAt']);
+      await writeSheet(BUDGET_SHEET_ID, 'SaveMeta!A2', [[stamp]]);
+    } catch(e2) {
+      console.error('Could not write save stamp:', e2.message);
+    }
+  }
+  lastKnownSaveStamp = stamp;
+}
+
 function scheduleSave() {
   setSyncStatus('syncing');
   clearTimeout(syncTimer);
@@ -5172,6 +5283,21 @@ function setSyncStatus(s) {
 
 async function saveAll() {
   try {
+    // Conflict check: has someone else saved since we last knew the state of
+    // things? If so, warn before silently overwriting their changes.
+    const currentStamp = await readSaveStamp();
+    if (lastKnownSaveStamp !== null && currentStamp !== null && currentStamp !== lastKnownSaveStamp) {
+      const proceed = confirm(
+        "Someone else saved changes since you loaded this page.\n\n" +
+        "Saving now could overwrite their changes.\n\n" +
+        "OK = Save anyway (overwrites their changes)\nCancel = Reload the page first to see their changes (you'll lose any unsaved edits you've made since loading)"
+      );
+      if (!proceed) {
+        location.reload();
+        return;
+      }
+    }
+
     // Category state
     const stateRows = [['Month','Category','IsSpent','IsClosed','SurplusCovered']];
     Object.entries(trackerData.state).forEach(([month, cats]) =>
@@ -5180,13 +5306,18 @@ async function saveAll() {
       )
     );
 
-    // Transactions
-    const txnRows = [['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated','Source']];
-    Object.entries(trackerData.transactions).forEach(([month, cats]) =>
-      Object.entries(cats).forEach(([cat, txns]) =>
-        txns.forEach(t => txnRows.push([t.id, month, cat, t.desc, t.amt, t.ts, t.splitGroupId || '', t.autoGenerated ? 'TRUE' : 'FALSE', t.src || '']))
-      )
-    );
+    // Transactions — only rebuilt in full when an edit/delete actually
+    // happened. Pure new-transaction adds are handled entirely by the
+    // append-only path above and never need this tab rewritten.
+    let txnRows = null;
+    if (transactionsNeedFullRewrite) {
+      txnRows = [['ID','Month','Category','Description','Amount','Timestamp','SplitGroupID','AutoGenerated','Source']];
+      Object.entries(trackerData.transactions).forEach(([month, cats]) =>
+        Object.entries(cats).forEach(([cat, txns]) =>
+          txns.forEach(t => txnRows.push([t.id, month, cat, t.desc, t.amt, t.ts, t.splitGroupId || '', t.autoGenerated ? 'TRUE' : 'FALSE', t.src || '']))
+        )
+      );
+    }
 
     // Sinking funds
     const sfRows = [['Category','IsActive','ActiveFrom','ResetFromMonth']];
@@ -5214,13 +5345,14 @@ async function saveAll() {
 
     await Promise.all([
       clearAndWrite(BUDGET_SHEET_ID, 'CategoryState!A1',   stateRows),
-      clearAndWrite(BUDGET_SHEET_ID, 'Transactions!A1',    txnRows),
       clearAndWrite(BUDGET_SHEET_ID, 'SinkingFunds!A1',    sfRows),
       clearAndWrite(BUDGET_SHEET_ID, 'TrackerBudgets!A1',  budgetRows),
       clearAndWrite(BUDGET_SHEET_ID, 'ExtraMonths!A1',     extraMonthRows),
       clearAndWrite(BUDGET_SHEET_ID, 'MerchantMap!A1',     mmRows),
       clearAndWrite(BUDGET_SHEET_ID, 'WindfallLog!A1',     wlRows),
+      ...(txnRows ? [clearAndWrite(BUDGET_SHEET_ID, 'Transactions!A1', txnRows)] : []),
     ]);
+    transactionsNeedFullRewrite = false;
 
     // Skipped Plaid transactions (so "X" skips never resurface on future syncs)
     // Isolated in its own try/catch: if the SkippedTxns tab hasn't been created yet
@@ -5233,6 +5365,7 @@ async function saveAll() {
       console.log('SkippedTxns save skipped — tab may not exist yet:', e.message);
     }
 
+    await bumpSaveStamp();
     setSyncStatus('ok');
   } catch (e) {
     setSyncStatus('error');
